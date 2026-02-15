@@ -41,7 +41,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 
 ### Method 2: Manual
 1. Download `main.js`, `manifest.json`, and `styles.css` from Releases.
-2. Create folder `.obsidian/plugins/obsidian-settings-sidebar-organizer/`.
+2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
 3. Paste files and reload Obsidian.
 
 ## ⚙️ How to use
