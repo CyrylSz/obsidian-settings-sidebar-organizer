@@ -12,7 +12,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 
 > [!CAUTION]
 > **Experimental "DOM Hack"**
-> This plugin manipulates the Obsidian UI directly (DOM) because there is no official API for the settings sidebar.
+> This plugin manipulates the Obsidian UI directly because there is no official API for the settings sidebar.
 > * **Risk:** If Obsidian updates their UI structure (CSS classes), this plugin might break or stop working until updated.
 > * **Stability:** It creates "proxy" buttons. When you click an item in a folder, it programmatically clicks the real, hidden button.
 
@@ -23,7 +23,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 * **Keyword Matching:** Automatically sorts plugins into folders based on words in their names.
 * **"Ungrouped" Folder:** Automatically catches any plugin that doesn't match your keywords so nothing gets lost (can be hidden).
 
-### 2. ✏️ Customization (Aliases & Order)
+### 2. ✏️ Aliases & Order
 * **Renaming (Aliasing):** Rename plugins in the sidebar to save space or improve clarity.
 * **Manual Reordering:** Use Up/Down arrows to sort plugins inside their folders exactly how you want them.
 
@@ -33,16 +33,16 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 
 ## 📦 Installation
 
-### Method 1: BRAT
+### Method 1: Manual (recommended)
+1. Download `main.js` and `manifest.json`.
+2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
+3. Paste files and reload Obsidian.
+
+### Method 2: BRAT
 1. Install **BRAT** from the Community Plugins store.
 2. Go to **Settings > BRAT > Add Beta plugin**.
 3. Paste this repo URL: `https://github.com/CyrylSz/obsidian-settings-sidebar-organizer`
 4. Click **Add Plugin**.
-
-### Method 2: Manual
-1. Download `main.js` and `manifest.json`.
-2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
-3. Paste files and reload Obsidian.
 
 ## ⚙️ How to use
 Everything is configured via **Settings > Settings Sidebar Organizer**:
