@@ -40,6 +40,10 @@ module.exports = class MyOrganizerPlugin extends obsidian.Plugin {
         });
 
         this.registerDomEvent(document, 'click', (evt) => {
+            if (evt.target.closest('.checkbox-container') || evt.target.closest('button')) {
+                setTimeout(() => this.checkAndApply(), 150);
+                setTimeout(() => this.checkAndApply(), 600);
+            }
             if (!this.settings.collapsibleHeaders) return;
             if (evt.target.closest('.my-org-section-btn')) return;
 
