@@ -1,0 +1,190 @@
+.my-org-hidden { display: none !important; }
+.my-org-hide-nav { display: none !important; }
+
+/* --- BUTTON CONTAINER STYLE --- */
+.my-org-add-group-container {
+    width: 100%;
+    text-align: center;
+    margin-top: 25px;
+    margin-bottom: 20px;
+    display: block;
+}
+
+.my-org-section-btn {
+    position: absolute;
+    right: 10px; /* Default state (collapsed headers OFF) */
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+/* Dynamic state: When collapsed headers are ON */
+.my-org-collapse-enabled .my-org-section-btn {
+    right: 35px;
+}
+
+.my-org-folder {
+    border-top: 1px solid var(--background-modifier-border);
+    width: 100%;
+    margin-top: -1px;
+}
+.my-org-folder.my-org-special {
+    border-top: 1px solid var(--interactive-accent); 
+    margin-top: 5px;
+}
+.my-org-summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    font-weight: 600;
+    background-color: var(--background-secondary); 
+    color: var(--text-normal);
+    border-left: 4px solid var(--interactive-accent);
+    display: flex;
+    align-items: center;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 2px;
+    user-select: none;
+    font-size: 13px;
+    transition: background-color 0.1s;
+}
+.my-org-summary:hover {
+    background-color: var(--background-modifier-hover);
+}
+.my-org-summary::before {
+    content: '▶';
+    font-size: 8px;
+    margin-right: 8px;
+    transition: transform 0.1s;
+    color: var(--text-muted);
+}
+.my-org-folder[open] .my-org-summary::before {
+    transform: rotate(90deg);
+}
+.my-org-folder > summary { list-style: none; }
+.my-org-folder > summary::-webkit-details-marker { display: none; }
+
+.my-org-proxy {
+    padding: 6px 12px 6px 32px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    border-radius: 4px;
+    display: block;
+}
+.my-org-proxy:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.my-org-proxy.is-active {
+    background-color: var(--background-modifier-active-hover);
+    color: var(--text-normal);
+    font-weight: bold;
+}
+
+.vertical-tab-header-group-title {
+    cursor: default; /* Default state */
+    position: relative;
+    transition: color 0.2s;
+}
+
+/* Dynamic state: When collapsed headers are ON */
+.my-org-collapse-enabled .vertical-tab-header-group-title {
+    cursor: pointer;
+}
+.my-org-collapse-enabled .vertical-tab-header-group-title:hover {
+    color: var(--text-accent);
+}
+
+.vertical-tab-header-group-title::after {
+    content: '▼';
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--text-faint);
+    transition: transform 0.2s;
+    display: none; /* Default state */
+}
+
+/* Dynamic state: When collapsed headers are ON */
+.my-org-collapse-enabled .vertical-tab-header-group-title::after {
+    display: block;
+}
+
+.vertical-tab-header-group-title.is-collapsed::after {
+    transform: translateY(-50%) rotate(-90deg);
+}
+.vertical-tab-header-group-items.is-collapsed {
+    display: none;
+}
+
+.my-org-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+.my-org-modal-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+.my-org-modal-item-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.my-org-modal-arrow {
+    color: var(--text-faint);
+    font-weight: bold;
+}
+.my-org-modal-item input {
+    width: 150px;
+}
+.my-org-modal-controls {
+    display: flex;
+    gap: 2px;
+}
+.my-org-modal-btn {
+    padding: 2px 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-radius: 4px;
+}
+.my-org-modal-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.my-org-btn-reset {
+    background-color: var(--interactive-normal);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+    box-shadow: var(--input-shadow);
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+.my-org-btn-reset:hover {
+    background-color: var(--interactive-hover);
+    color: var(--text-normal);
+}

@@ -25,7 +25,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 
 ### 2. ✏️ Aliases & Order
 * **Renaming (Aliasing):** Rename plugins in the sidebar to save space or improve clarity.
-* **Manual Reordering:** Use Up/Down arrows to sort plugins inside their folders exactly how you want them.
+* **Manual Reordering:** Use Up/Down arrows to sort plugins exactly how you want them.
 
 ### 3. 📉 Compact & Clean UI
 * **Compact Mode:** Hides the large "Core plugins" and "Community plugins" tabs. It moves them to small ⚙️ icons in the section headers to improve clarity.
@@ -34,7 +34,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 ## 📦 Installation
 
 ### Method 1: Manual (recommended)
-1. Download `main.js` and `manifest.json`.
+1. Download `main.js`, `styles.css`, and `manifest.json`.
 2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
 3. Paste files and reload Obsidian.
 

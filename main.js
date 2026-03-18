@@ -9,23 +9,23 @@ const DEFAULT_SETTINGS = {
     collapsedGroups: {}
 };
 
-module.exports = class MyOrganizerPlugin extends obsidian.Plugin {
+module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     async onload() {
-        console.log('My Organizer Loaded (Fixed: Clicks & Scroll Lag)');
+        console.log('Settings Sidebar Organizer Loaded');
         await this.loadSettings();
         this.addSettingTab(new MyOrganizerSettingTab(this.app, this));
-        this.addStyle();
+        
+        // Apply dynamic body class for collapsible headers CSS
+        document.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
 
         // Flag to prevent infinite loops (Observer -> DOM change -> Observer)
         this.isOrganizing = false;
         // Flag indicating if the observer is currently attached
         this.observing = false;
 
-        // Use MutationObserver instead of polling to prevent scroll lag.
         // It reacts only to actual DOM changes (node additions/removals).
         this.observer = new MutationObserver((mutations) => {
             if (this.isOrganizing) return;
-            // Check for significant DOM changes (node addition/removal)
             const hasNodeChanges = mutations.some(m => m.type === 'childList');
             if (hasNodeChanges) {
                 this.checkAndApply();
@@ -40,10 +40,23 @@ module.exports = class MyOrganizerPlugin extends obsidian.Plugin {
         });
 
         this.registerDomEvent(document, 'click', (evt) => {
+            // Catches the global click and waits for Obsidian to finish rebuilding the Document Object Model
             if (evt.target.closest('.checkbox-container') || evt.target.closest('button')) {
-                setTimeout(() => this.checkAndApply(), 150);
-                setTimeout(() => this.checkAndApply(), 600);
+                // Clear any existing timers if the user clicks rapidly (prevents overlapping chaos)
+                if (this.clickTimer1) clearTimeout(this.clickTimer1);
+                if (this.clickTimer2) clearTimeout(this.clickTimer2);
+                if (this.clickTimer3) clearTimeout(this.clickTimer3);
+
+                // 1. Catches fast computers almost instantly
+                this.clickTimer1 = setTimeout(() => this.checkAndApply(), 100);
+                
+                // 2. Catches average computers and moderate vaults
+                this.clickTimer2 = setTimeout(() => this.checkAndApply(), 500);
+                
+                // 3. Catches very slow computers or incredibly heavy vaults
+                this.clickTimer3 = setTimeout(() => this.checkAndApply(), 1500);
             }
+
             if (!this.settings.collapsibleHeaders) return;
             if (evt.target.closest('.my-org-section-btn')) return;
 
@@ -95,205 +108,14 @@ module.exports = class MyOrganizerPlugin extends obsidian.Plugin {
 
     onunload() {
         if (this.observer) this.observer.disconnect();
-        const style = document.getElementById('my-org-styles');
-        if (style) style.remove();
+        
+        document.body.classList.remove('my-org-collapse-enabled');
+        
         document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
         document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
         document.querySelectorAll('.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
         document.querySelectorAll('.my-org-hide-nav').forEach(el => el.classList.remove('my-org-hide-nav'));
         document.querySelectorAll('.my-org-section-btn').forEach(btn => btn.remove());
-    }
-
-    addStyle() {
-        const existing = document.getElementById('my-org-styles');
-        if (existing) existing.remove();
-
-        const collapseEnabled = this.settings.collapsibleHeaders;
-
-        const css = `
-            .my-org-hidden { display: none !important; }
-            .my-org-hide-nav { display: none !important; }
-
-            /* --- BUTTON CONTAINER STYLE --- */
-            .my-org-add-group-container {
-                width: 100%;
-                text-align: center;
-                margin-top: 25px;
-                margin-bottom: 20px;
-                display: block;
-            }
-
-            .my-org-section-btn {
-                position: absolute;
-                right: ${collapseEnabled ? '35px' : '10px'};
-                top: 50%;
-                transform: translateY(-50%);
-                cursor: pointer;
-                color: var(--text-muted);
-                opacity: 0.7;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 4px;
-                border-radius: 4px;
-                transition: all 0.2s ease;
-                z-index: 10;
-            }
-            .my-org-section-btn:hover {
-                background-color: var(--background-modifier-hover);
-                color: var(--text-normal);
-                opacity: 1;
-            }
-
-            .my-org-folder {
-                border-top: 1px solid var(--background-modifier-border);
-                width: 100%;
-                margin-top: -1px;
-            }
-            .my-org-folder.my-org-special {
-                border-top: 1px solid var(--interactive-accent); 
-                margin-top: 5px;
-            }
-            .my-org-summary {
-                cursor: pointer;
-                padding: 8px 12px;
-                font-weight: 600;
-                background-color: var(--background-secondary); 
-                color: var(--text-normal);
-                border-left: 4px solid var(--interactive-accent);
-                display: flex;
-                align-items: center;
-                border-radius: 0 4px 4px 0;
-                margin-bottom: 2px;
-                user-select: none;
-                font-size: 13px;
-                transition: background-color 0.1s;
-            }
-            .my-org-summary:hover {
-                background-color: var(--background-modifier-hover);
-            }
-            .my-org-summary::before {
-                content: '▶';
-                font-size: 8px;
-                margin-right: 8px;
-                transition: transform 0.1s;
-                color: var(--text-muted);
-            }
-            .my-org-folder[open] .my-org-summary::before {
-                transform: rotate(90deg);
-            }
-            .my-org-folder > summary { list-style: none; }
-            .my-org-folder > summary::-webkit-details-marker { display: none; }
-            
-            .my-org-proxy {
-                padding: 6px 12px 6px 32px;
-                cursor: pointer;
-                color: var(--text-muted);
-                font-size: 13px;
-                border-radius: 4px;
-                display: block;
-            }
-            .my-org-proxy:hover {
-                background-color: var(--background-modifier-hover);
-                color: var(--text-normal);
-            }
-            .my-org-proxy.is-active {
-                background-color: var(--background-modifier-active-hover);
-                color: var(--text-normal);
-                font-weight: bold;
-            }
-
-            .vertical-tab-header-group-title {
-                cursor: ${collapseEnabled ? 'pointer' : 'default'};
-                position: relative;
-                transition: color 0.2s;
-            }
-            .vertical-tab-header-group-title:hover {
-                color: ${collapseEnabled ? 'var(--text-accent)' : 'inherit'};
-            }
-            .vertical-tab-header-group-title::after {
-                content: '▼';
-                position: absolute;
-                right: 15px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 10px;
-                color: var(--text-faint);
-                transition: transform 0.2s;
-                display: ${collapseEnabled ? 'block' : 'none'};
-            }
-            .vertical-tab-header-group-title.is-collapsed::after {
-                transform: translateY(-50%) rotate(-90deg);
-            }
-            .vertical-tab-header-group-items.is-collapsed {
-                display: none;
-            }
-
-            .my-org-modal-list {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                margin-top: 15px;
-                max-height: 60vh;
-                overflow-y: auto;
-                padding-right: 5px;
-            }
-            .my-org-modal-item {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding: 8px;
-                background-color: var(--background-primary);
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 6px;
-                flex-shrink: 0;
-            }
-            .my-org-modal-item-name {
-                flex: 1;
-                font-size: 13px;
-                color: var(--text-muted);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .my-org-modal-arrow {
-                color: var(--text-faint);
-                font-weight: bold;
-            }
-            .my-org-modal-item input {
-                width: 150px;
-            }
-            .my-org-modal-controls {
-                display: flex;
-                gap: 2px;
-            }
-            .my-org-modal-btn {
-                padding: 2px 6px;
-                cursor: pointer;
-                color: var(--text-muted);
-                border-radius: 4px;
-            }
-            .my-org-modal-btn:hover {
-                background-color: var(--background-modifier-hover);
-                color: var(--text-normal);
-            }
-            .my-org-btn-reset {
-                background-color: var(--interactive-normal);
-                color: var(--text-normal);
-                border: 1px solid var(--background-modifier-border);
-                box-shadow: var(--input-shadow);
-                cursor: pointer;
-                transition: background-color 0.1s ease;
-            }
-            .my-org-btn-reset:hover {
-                background-color: var(--interactive-hover);
-                color: var(--text-normal);
-            }
-        `;
-        const styleEl = document.createElement('style');
-        styleEl.id = 'my-org-styles';
-        styleEl.textContent = css;
-        document.head.appendChild(styleEl);
     }
 
     async loadSettings() {
@@ -677,7 +499,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                     if (!value) {
                         document.querySelectorAll('.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
                     }
-                    this.plugin.addStyle();
+                    document.body.classList.toggle('my-org-collapse-enabled', value);
                 }));
 
         new obsidian.Setting(containerEl)
@@ -688,7 +510,6 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.compactMode = value;
                     await this.plugin.saveSettings(false);
-                    this.plugin.addStyle();
                     this.plugin.checkAndApply();
                 }));
 
