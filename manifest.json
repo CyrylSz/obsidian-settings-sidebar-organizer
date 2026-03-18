@@ -1,7 +1,7 @@
 {
     "id": "settings-sidebar-organizer",
     "name": "Settings Sidebar Organizer",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minAppVersion": "0.15.0",
     "description": "Groups Community Plugins into folders, allows renaming, reordering, and compacting the sidebar.",
     "author": "Golomp",
