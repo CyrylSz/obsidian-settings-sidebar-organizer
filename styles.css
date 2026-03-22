@@ -1,7 +1,15 @@
+/* ==========================================================
+   SETTINGS SIDEBAR ORGANIZER - CUSTOMIZATION STYLES
+   Use CSS Snippets to override these styles if you want 
+   to change the look of your plugin folders and items.
+   ========================================================== */
+
+/* Utility classes used to hide elements */
 .my-org-hidden { display: none !important; }
 .my-org-hide-nav { display: none !important; }
 
 /* --- BUTTON CONTAINER STYLE --- */
+/* The area holding the "+ Add group" button in settings */
 .my-org-add-group-container {
     width: 100%;
     text-align: center;
@@ -10,9 +18,11 @@
     display: block;
 }
 
+/* The small gear button that appears next to main sidebar headers 
+   (like "Community plugins") when Compact Mode is ON */
 .my-org-section-btn {
     position: absolute;
-    right: 10px; /* Default state (collapsed headers OFF) */
+    right: 10px; /* Default position when collapsible headers are OFF */
     top: 50%;
     transform: translateY(-50%);
     cursor: pointer;
@@ -27,27 +37,36 @@
     z-index: 10;
 }
 
-/* Dynamic state: When collapsed headers are ON */
+/* Moves the gear button slightly to the left when the collapse arrow is visible */
 .my-org-collapse-enabled .my-org-section-btn {
     right: 35px;
 }
 
+/* ==========================================================
+   SIDEBAR FOLDERS (GROUPS) 
+   ========================================================== */
+
+/* The main container for your custom folders in the sidebar */
 .my-org-folder {
     border-top: 1px solid var(--background-modifier-border);
     width: 100%;
     margin-top: -1px;
 }
+
+/* Specific styling for the "Ungrouped" folder */
 .my-org-folder.my-org-special {
     border-top: 1px solid var(--interactive-accent); 
     margin-top: 5px;
 }
+
+/* The clickable header/title of your custom folders in the sidebar */
 .my-org-summary {
     cursor: pointer;
     padding: 8px 12px;
     font-weight: 600;
     background-color: var(--background-secondary); 
     color: var(--text-normal);
-    border-left: 4px solid var(--interactive-accent);
+    border-left: 4px solid var(--interactive-accent); /* The colored stripe on the left */
     display: flex;
     align-items: center;
     border-radius: 0 4px 4px 0;
@@ -56,9 +75,13 @@
     font-size: 13px;
     transition: background-color 0.1s;
 }
+
+/* Hover effect for the folder title */
 .my-org-summary:hover {
     background-color: var(--background-modifier-hover);
 }
+
+/* The small arrow next to the folder title */
 .my-org-summary::before {
     content: '▶';
     font-size: 8px;
@@ -66,44 +89,65 @@
     transition: transform 0.1s;
     color: var(--text-muted);
 }
+
+/* Rotates the arrow when the folder is open */
 .my-org-folder[open] .my-org-summary::before {
     transform: rotate(90deg);
 }
+
+/* Hides default browser styles for the details summary element */
 .my-org-folder > summary { list-style: none; }
 .my-org-folder > summary::-webkit-details-marker { display: none; }
 
+/* ==========================================================
+   SIDEBAR ITEMS (PLUGINS INSIDE FOLDERS)
+   ========================================================== */
+
+/* The individual plugin items inside your custom folders */
 .my-org-proxy {
-    padding: 6px 12px 6px 32px;
+    padding: 6px 12px 6px 32px; /* Left padding creates the indent inside the folder */
     cursor: pointer;
     color: var(--text-muted);
     font-size: 13px;
     border-radius: 4px;
     display: block;
 }
+
+/* Hover effect for plugin items */
 .my-org-proxy:hover {
     background-color: var(--background-modifier-hover);
     color: var(--text-normal);
 }
+
+/* Styling for the currently selected/active plugin in the sidebar */
 .my-org-proxy.is-active {
     background-color: var(--background-modifier-active-hover);
     color: var(--text-normal);
     font-weight: bold;
 }
 
+/* ==========================================================
+   COLLAPSIBLE SIDEBAR HEADERS (NATIVE SECTIONS)
+   ========================================================== */
+
+/* Base styling for main native headers (e.g., "Core plugins") */
 .vertical-tab-header-group-title {
-    cursor: default; /* Default state */
+    cursor: default; /* Default behavior: not clickable */
     position: relative;
     transition: color 0.2s;
 }
 
-/* Dynamic state: When collapsed headers are ON */
+/* When the "Collapsible sidebar headers" option is enabled */
 .my-org-collapse-enabled .vertical-tab-header-group-title {
     cursor: pointer;
 }
+
+/* Hover effect for main native headers */
 .my-org-collapse-enabled .vertical-tab-header-group-title:hover {
     color: var(--text-accent);
 }
 
+/* The arrow that appears on native headers to collapse them */
 .vertical-tab-header-group-title::after {
     content: '▼';
     position: absolute;
@@ -113,21 +157,29 @@
     font-size: 10px;
     color: var(--text-faint);
     transition: transform 0.2s;
-    display: none; /* Default state */
+    display: none; /* Hidden by default */
 }
 
-/* Dynamic state: When collapsed headers are ON */
+/* Shows the collapse arrow when the feature is enabled */
 .my-org-collapse-enabled .vertical-tab-header-group-title::after {
     display: block;
 }
 
+/* Rotates the collapse arrow when the native section is closed */
 .vertical-tab-header-group-title.is-collapsed::after {
     transform: translateY(-50%) rotate(-90deg);
 }
+
+/* Hides the content of the native section when collapsed */
 .vertical-tab-header-group-items.is-collapsed {
     display: none;
 }
 
+/* ==========================================================
+   POPUP MODAL MENU (MANAGE ITEMS)
+   ========================================================== */
+
+/* The scrollable list inside the "Manage items" popup */
 .my-org-modal-list {
     display: flex;
     flex-direction: column;
@@ -137,6 +189,8 @@
     overflow-y: auto;
     padding-right: 5px;
 }
+
+/* A single row (plugin) inside the popup list */
 .my-org-modal-item {
     display: flex;
     align-items: center;
@@ -147,6 +201,8 @@
     border-radius: 6px;
     flex-shrink: 0;
 }
+
+/* The plugin name text inside the popup row */
 .my-org-modal-item-name {
     flex: 1;
     font-size: 13px;
@@ -155,27 +211,39 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* The small arrow pointing from the real name to the alias input field */
 .my-org-modal-arrow {
     color: var(--text-faint);
     font-weight: bold;
 }
+
+/* The text input box for setting a plugin alias */
 .my-org-modal-item input {
     width: 150px;
 }
+
+/* Container for the UP/DOWN arrow buttons */
 .my-org-modal-controls {
     display: flex;
     gap: 2px;
 }
+
+/* The UP/DOWN arrow buttons inside the popup */
 .my-org-modal-btn {
     padding: 2px 6px;
     cursor: pointer;
     color: var(--text-muted);
     border-radius: 4px;
 }
+
+/* Hover effect for UP/DOWN arrow buttons */
 .my-org-modal-btn:hover {
     background-color: var(--background-modifier-hover);
     color: var(--text-normal);
 }
+
+/* The "Reset defaults" button inside the popup */
 .my-org-btn-reset {
     background-color: var(--interactive-normal);
     color: var(--text-normal);
@@ -183,8 +251,53 @@
     box-shadow: var(--input-shadow);
     cursor: pointer;
     transition: background-color 0.1s ease;
+    margin-right: auto;
 }
+
+/* Hover effect for the reset button */
 .my-org-btn-reset:hover {
     background-color: var(--interactive-hover);
     color: var(--text-normal);
+}
+
+/* The descriptive text at the top of the popup */
+.my-org-modal-desc {
+    font-size: 0.8em;
+    color: var(--text-muted);
+}
+
+/* Container for the action buttons at the bottom of the popup */
+.my-org-modal-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Text shown when no plugins match the keywords */
+.my-org-modal-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Faded appearance when a button cannot be clicked (e.g., move UP on the first item) */
+.my-org-modal-btn.is-disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ==========================================================
+   PLUGIN SETTINGS MENU (MAIN TAB)
+   ========================================================== */
+
+/* The visual box surrounding each of your configured groups in settings */
+.my-org-group-card {
+    border: 1px solid var(--background-modifier-border);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+}
+
+/* The "+ Add group" button width */
+.my-org-add-group-btn {
+    width: 200px;
 }

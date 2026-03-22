@@ -11,9 +11,8 @@ const DEFAULT_SETTINGS = {
 
 module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     async onload() {
-        console.log('Settings Sidebar Organizer Loaded');
         await this.loadSettings();
-        this.addSettingTab(new MyOrganizerSettingTab(this.app, this));
+        this.addSettingTab(new OrganizerSettingTab(this.app, this));
         
         // Apply dynamic body class for collapsible headers CSS
         document.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
@@ -103,7 +102,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                     this.observing = false;
                 }
             }
-        }, 1000)); // Checking existence every 1s is resource-efficient
+        }, 1000)); // Checking existence every 1s
     }
 
     onunload() {
@@ -242,7 +241,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             details.className = 'my-org-folder';
             const isOpen = this.settings.collapsedGroups[g.title] !== false;
             details.open = isOpen;
-            details.innerHTML = `<summary class="my-org-summary">${g.title}</summary>`;
+            
+            // Creating element safely
+            details.createEl('summary', { cls: 'my-org-summary', text: g.title });
+
             details.addEventListener('toggle', () => {
                 this.settings.collapsedGroups[g.title] = details.open;
                 this.saveSettings(false);
@@ -386,8 +388,8 @@ class GroupConfigModal extends obsidian.Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.createEl('h3', { text: `Edit items: ${this.group.title}` });
-        contentEl.createEl('p', { text: 'Click arrows to reorder. Type to rename.', style: 'font-size: 0.8em; color: var(--text-muted);' });
+        new obsidian.Setting(contentEl).setName(`Edit items: ${this.group.title}`).setHeading();
+        contentEl.createEl('p', { text: 'Click arrows to reorder. Type to rename.', cls: 'my-org-modal-desc' });
 
         if (!this.app.plugins || !this.app.plugins.manifests) return;
         const allPlugins = Object.values(this.app.plugins.manifests).map(m => m.name);
@@ -408,16 +410,16 @@ class GroupConfigModal extends obsidian.Modal {
         this.listContainer = contentEl.createDiv({ cls: 'my-org-modal-list' });
         this.renderList();
 
-        const btnDiv = contentEl.createDiv({ style: 'margin-top: 20px; display: flex; justify-content: flex-end;' });
-        const resetBtn = btnDiv.createEl('button', { text: 'Reset Defaults', cls: 'my-org-btn-reset' });
-        resetBtn.style.marginRight = 'auto';
+        const btnDiv = contentEl.createDiv({ cls: 'my-org-modal-actions' });
+        const resetBtn = btnDiv.createEl('button', { text: 'Reset defaults', cls: 'my-org-btn-reset' });
+        
         resetBtn.onclick = () => {
             this.items.sort((a, b) => a.name.localeCompare(b.name));
             this.items.forEach(i => i.alias = '');
             this.renderList();
         };
 
-        const saveBtn = btnDiv.createEl('button', { text: 'Save Changes', cls: 'mod-cta' });
+        const saveBtn = btnDiv.createEl('button', { text: 'Save changes', cls: 'mod-cta' });
         saveBtn.onclick = async () => {
             this.plugin.settings.groups[this.groupIndex].items = this.items;
             await this.plugin.saveSettings(true);
@@ -428,7 +430,7 @@ class GroupConfigModal extends obsidian.Modal {
     renderList() {
         this.listContainer.empty();
         if (this.items.length === 0) {
-            this.listContainer.createDiv({ text: 'No plugins found matching keywords.', style: 'color: var(--text-muted); font-style: italic;' });
+            this.listContainer.createDiv({ text: 'No plugins found matching keywords.', cls: 'my-org-modal-empty' });
             return;
         }
 
@@ -443,7 +445,7 @@ class GroupConfigModal extends obsidian.Modal {
                     this.renderList();
                 }
             };
-            if (index === 0) upBtn.style.opacity = '0.3';
+            if (index === 0) upBtn.classList.add('is-disabled');
 
             const downBtn = ctrls.createEl('div', { cls: 'my-org-modal-btn', text: '▼' });
             downBtn.onclick = () => {
@@ -452,7 +454,7 @@ class GroupConfigModal extends obsidian.Modal {
                     this.renderList();
                 }
             };
-            if (index === this.items.length - 1) downBtn.style.opacity = '0.3';
+            if (index === this.items.length - 1) downBtn.classList.add('is-disabled');
 
             row.createDiv({ cls: 'my-org-modal-item-name', text: item.name, title: item.name });
             row.createDiv({ cls: 'my-org-modal-arrow', text: '→' });
@@ -471,15 +473,14 @@ class GroupConfigModal extends obsidian.Modal {
     }
 }
 
-class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
+class OrganizerSettingTab extends obsidian.PluginSettingTab {
     constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        containerEl.createEl('h2', { text: 'Sidebar Group Organizer' });
 
         new obsidian.Setting(containerEl)
-            .setName('Show Ungrouped Plugins')
+            .setName('Show ungrouped plugins')
             .setDesc('Move plugins that do not match any group into a special "Ungrouped" folder.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.showUngrouped)
@@ -489,7 +490,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         new obsidian.Setting(containerEl)
-            .setName('Collapsible Sidebar Headers')
+            .setName('Collapsible sidebar headers')
             .setDesc('Allow collapsing "Options", "Core plugins", and "Community plugins".')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.collapsibleHeaders)
@@ -503,7 +504,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         new obsidian.Setting(containerEl)
-            .setName('Compact Mode')
+            .setName('Compact mode')
             .setDesc('Moves "Core plugins" and "Community plugins" buttons from the Options list to their respective section headers.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.compactMode)
@@ -514,13 +515,10 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: 'Your Groups' });
+        new obsidian.Setting(containerEl).setName('Your groups').setHeading();
 
         this.plugin.settings.groups.forEach((group, index) => {
-            const div = containerEl.createDiv();
-            div.style.border = '1px solid var(--background-modifier-border)';
-            div.style.padding = '10px'; div.style.marginBottom = '10px';
-            div.style.borderRadius = '5px';
+            const div = containerEl.createDiv({ cls: 'my-org-group-card' });
 
             const headerSetting = new obsidian.Setting(div)
                 .setName(`Group ${index + 1}`)
@@ -528,7 +526,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
 
             headerSetting.addExtraButton(b => {
                 b.setIcon('settings')
-                    .setTooltip('Manage Items (Rename & Reorder)')
+                    .setTooltip('Manage items (rename & reorder)')
                     .onClick(() => {
                         new GroupConfigModal(this.app, this.plugin, index).open();
                     });
@@ -536,7 +534,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
 
             headerSetting.addExtraButton(b => {
                 b.setIcon('arrow-up')
-                    .setTooltip('Move Group Up')
+                    .setTooltip('Move group up')
                     .setDisabled(index === 0)
                     .onClick(async () => {
                         if (index > 0) {
@@ -551,7 +549,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
 
             headerSetting.addExtraButton(b => {
                 b.setIcon('arrow-down')
-                    .setTooltip('Move Group Down')
+                    .setTooltip('Move group down')
                     .setDisabled(index === this.plugin.settings.groups.length - 1)
                     .onClick(async () => {
                         if (index < this.plugin.settings.groups.length - 1) {
@@ -564,7 +562,7 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
                     });
             });
 
-            headerSetting.addExtraButton(b => b.setIcon('trash').setTooltip('Delete Group').onClick(async () => {
+            headerSetting.addExtraButton(b => b.setIcon('trash').setTooltip('Delete group').onClick(async () => {
                 this.plugin.settings.groups.splice(index, 1);
                 delete this.plugin.settings.collapsedGroups[group.title];
                 await this.plugin.saveSettings();
@@ -587,8 +585,8 @@ class MyOrganizerSettingTab extends obsidian.PluginSettingTab {
         });
 
         const btnDiv = containerEl.createDiv({ cls: 'my-org-add-group-container' });
-        const btn = btnDiv.createEl('button', { text: '+ Add Group', cls: 'mod-cta' });
-        btn.style.width = '200px';
+        const btn = btnDiv.createEl('button', { text: '+ Add group', cls: 'mod-cta my-org-add-group-btn' });
+        
         btn.onclick = async () => {
             this.plugin.settings.groups.push({ title: 'New Folder', keywords: '', items: [] });
             await this.plugin.saveSettings();
