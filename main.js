@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
     showUngrouped: true,
     collapsibleHeaders: true,
     compactMode: false,
+    startCollapsed: false,
     groups: [],
     collapsedSections: [],
     collapsedGroups: {}
@@ -13,7 +14,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     async onload() {
         await this.loadSettings();
         this.addSettingTab(new OrganizerSettingTab(this.app, this));
-        
+
         // Apply dynamic body class for collapsible headers CSS
         document.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
 
@@ -48,10 +49,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
                 // 1. Catches fast computers almost instantly
                 this.clickTimer1 = setTimeout(() => this.checkAndApply(), 100);
-                
+
                 // 2. Catches average computers and moderate vaults
                 this.clickTimer2 = setTimeout(() => this.checkAndApply(), 500);
-                
+
                 // 3. Catches very slow computers or incredibly heavy vaults
                 this.clickTimer3 = setTimeout(() => this.checkAndApply(), 1500);
             }
@@ -100,16 +101,23 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 if (this.observing) {
                     this.observer.disconnect();
                     this.observing = false;
+
+                    // INSTANT COLLAPSE: Forget opened folders the moment settings are closed
+                    if (this.settings.startCollapsed) {
+                        this.settings.collapsedGroups = {};
+                        // Save silently so it remembers the state for next time
+                        this.saveSettings(false);
+                    }
                 }
             }
-        }, 1000)); // Checking existence every 1s
+        }, 100)); // Changed from 1000ms to 100ms for instant reaction
     }
 
     onunload() {
         if (this.observer) this.observer.disconnect();
-        
+
         document.body.classList.remove('my-org-collapse-enabled');
-        
+
         document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
         document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
         document.querySelectorAll('.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
@@ -239,9 +247,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         const groupsMap = this.settings.groups.map(g => {
             const details = document.createElement('details');
             details.className = 'my-org-folder';
-            const isOpen = this.settings.collapsedGroups[g.title] !== false;
+            const savedState = this.settings.collapsedGroups[g.title];
+            const isOpen = savedState !== undefined ? savedState : !this.settings.startCollapsed;
             details.open = isOpen;
-            
+
             // Creating element safely
             details.createEl('summary', { cls: 'my-org-summary', text: g.title });
 
@@ -260,7 +269,8 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
         const ungroupedDetails = document.createElement('details');
         ungroupedDetails.className = 'my-org-folder my-org-special';
-        ungroupedDetails.open = this.settings.collapsedGroups['Ungrouped'] !== false;
+        const savedUngroupedState = this.settings.collapsedGroups['Ungrouped'];
+        ungroupedDetails.open = savedUngroupedState !== undefined ? savedUngroupedState : !this.settings.startCollapsed;
         ungroupedDetails.addEventListener('toggle', () => {
             this.settings.collapsedGroups['Ungrouped'] = ungroupedDetails.open;
             this.saveSettings(false);
@@ -275,7 +285,11 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
         pluginItems.forEach(item => {
             const name = item.innerText.trim();
-            const isCommunityPlugin = pluginNames.some(pName => name.includes(pName) || pName.includes(name));
+
+            // Fix for renaming issues: rely on exact settings ID from the document element
+            const settingId = item.getAttribute('data-setting-id');
+            const isCommunityPlugin = settingId && this.app.plugins.manifests[settingId];
+
             if (!isCommunityPlugin) return;
             if (item.classList.contains('my-org-hidden')) return;
 
@@ -285,26 +299,24 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 foldersInserted = true;
             }
 
-            let matched = false;
+            let matchedCount = 0;
             for (const group of groupsMap) {
                 if (group.keywords.some(k => name.toLowerCase().includes(k))) {
                     const config = group.items.find(i => i.name === name);
                     const displayName = (config && config.alias) ? config.alias : name;
 
-                    // Pass the real name to createProxy
                     const proxy = this.createProxy(displayName, name, item, targetContainer);
                     group.element.appendChild(proxy);
                     group.proxies.push({ name: name, element: proxy });
 
-                    item.classList.add('my-org-hidden');
-                    matched = true;
-                    break;
+                    matchedCount++;
                 }
             }
 
-            if (!matched) {
+            if (matchedCount > 0) {
+                item.classList.add('my-org-hidden');
+            } else {
                 if (this.settings.showUngrouped) {
-                    // Pass the real name to createProxy
                     const proxy = this.createProxy(name, name, item, targetContainer);
                     ungroupedDetails.appendChild(proxy);
                     ungroupedCount++;
@@ -385,6 +397,17 @@ class GroupConfigModal extends obsidian.Modal {
         this.listContainer = null;
     }
 
+    checkForChanges() {
+        const isChanged = JSON.stringify(this.originalItems) !== JSON.stringify(this.items);
+        if (this.saveBtn) this.saveBtn.disabled = !isChanged;
+    }
+
+    updateSaveState() {
+        if (this.saveBtn) {
+            this.saveBtn.disabled = !this.hasChanges;
+        }
+    }
+
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
@@ -406,21 +429,47 @@ class GroupConfigModal extends obsidian.Modal {
                 currentItems.push({ name: name, alias: '' });
             }
         });
-        this.items = currentItems;
+
+        // Deep copy to prevent passing by reference
+        this.originalItems = JSON.parse(JSON.stringify(currentItems));
+        this.items = JSON.parse(JSON.stringify(currentItems));
+
+        // Replace paragraph with flex header containing the sort combobox
+        contentEl.querySelector('.my-org-modal-desc').remove();
+        const headerRow = contentEl.createDiv({ cls: 'my-org-modal-header-row' });
+        headerRow.createEl('p', { text: 'Click arrows to reorder. Type to rename.', cls: 'my-org-modal-desc' });
+
+        const sortSelect = headerRow.createEl('select', { cls: 'dropdown my-org-sort-select' });
+        sortSelect.add(new Option('Sort by...', 'none'));
+        sortSelect.add(new Option('Alias A-Z', 'az'));
+        sortSelect.add(new Option('Alias Z-A', 'za'));
+        sortSelect.onchange = () => {
+            if (sortSelect.value === 'az') {
+                this.items.sort((a, b) => (a.alias || a.name).localeCompare(b.alias || b.name));
+            } else if (sortSelect.value === 'za') {
+                this.items.sort((a, b) => (b.alias || b.name).localeCompare(a.alias || a.name));
+            }
+            sortSelect.value = 'none'; // Revert to placeholder after sorting
+            this.checkForChanges();
+            this.renderList();
+        };
+
         this.listContainer = contentEl.createDiv({ cls: 'my-org-modal-list' });
         this.renderList();
 
         const btnDiv = contentEl.createDiv({ cls: 'my-org-modal-actions' });
         const resetBtn = btnDiv.createEl('button', { text: 'Reset defaults', cls: 'my-org-btn-reset' });
-        
+
         resetBtn.onclick = () => {
             this.items.sort((a, b) => a.name.localeCompare(b.name));
             this.items.forEach(i => i.alias = '');
+            this.checkForChanges();
             this.renderList();
         };
 
-        const saveBtn = btnDiv.createEl('button', { text: 'Save changes', cls: 'mod-cta' });
-        saveBtn.onclick = async () => {
+        this.saveBtn = btnDiv.createEl('button', { text: 'Save changes', cls: 'mod-cta' });
+        this.saveBtn.disabled = true;
+        this.saveBtn.onclick = async () => {
             this.plugin.settings.groups[this.groupIndex].items = this.items;
             await this.plugin.saveSettings(true);
             this.close();
@@ -442,6 +491,7 @@ class GroupConfigModal extends obsidian.Modal {
             upBtn.onclick = () => {
                 if (index > 0) {
                     [this.items[index - 1], this.items[index]] = [this.items[index], this.items[index - 1]];
+                    this.checkForChanges();
                     this.renderList();
                 }
             };
@@ -451,6 +501,7 @@ class GroupConfigModal extends obsidian.Modal {
             downBtn.onclick = () => {
                 if (index < this.items.length - 1) {
                     [this.items[index + 1], this.items[index]] = [this.items[index], this.items[index + 1]];
+                    this.checkForChanges();
                     this.renderList();
                 }
             };
@@ -461,8 +512,10 @@ class GroupConfigModal extends obsidian.Modal {
 
             const input = row.createEl('input', { type: 'text', placeholder: 'Alias...' });
             input.value = item.alias || '';
-            input.onchange = (e) => {
+            // Change from onchange to oninput to catch live typing
+            input.oninput = (e) => {
                 this.items[index].alias = e.target.value;
+                this.checkForChanges();
             };
         });
     }
@@ -514,8 +567,42 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     this.plugin.checkAndApply();
                 }));
 
+        new obsidian.Setting(containerEl)
+            .setName('Collapse by default')
+            .setDesc('Start with all groups collapsed when opening the settings menu.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.startCollapsed)
+                .onChange(async (value) => {
+                    this.plugin.settings.startCollapsed = value;
+                    await this.plugin.saveSettings(true);
+                }));
+
         containerEl.createEl('hr');
         new obsidian.Setting(containerEl).setName('Your groups').setHeading();
+
+        const allPlugins = this.app.plugins && this.app.plugins.manifests
+            ? Object.values(this.app.plugins.manifests).map(m => m.name) : [];
+
+        // Helper function to calculate overlaps across all groups
+        const recalculateAllMatches = () => {
+            const pluginMatches = {};
+            allPlugins.forEach(p => pluginMatches[p] = []);
+
+            this.plugin.settings.groups.forEach(g => {
+                const kws = g.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+                if (kws.length > 0) {
+                    allPlugins.forEach(p => {
+                        if (kws.some(k => p.toLowerCase().includes(k))) {
+                            pluginMatches[p].push(g.title);
+                        }
+                    });
+                }
+            });
+            return pluginMatches;
+        };
+
+        // Array to hold the live-update functions for our badges
+        const badgeUpdaters = [];
 
         this.plugin.settings.groups.forEach((group, index) => {
             const div = containerEl.createDiv({ cls: 'my-org-group-card' });
@@ -578,15 +665,62 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 await this.plugin.saveSettings();
             }));
 
-            new obsidian.Setting(div).setName('Keywords').addTextArea(t => t.setValue(group.keywords).onChange(async v => {
-                this.plugin.settings.groups[index].keywords = v;
-                await this.plugin.saveSettings();
-            }));
+            const kwSetting = new obsidian.Setting(div).setName('Keywords');
+
+            // Create Badge
+            const badge = kwSetting.nameEl.createSpan({ cls: 'my-org-match-badge' });
+
+            // Logic to update a single badge's text and tooltip WITHOUT rebuilding the page
+            const updateBadge = (currentMatchesMap) => {
+                const matchedForThis = Object.keys(currentMatchesMap).filter(p => currentMatchesMap[p].includes(group.title));
+                badge.innerText = `${matchedForThis.length} matches ⓘ`;
+
+                if (matchedForThis.length > 0) {
+                    let tooltipText = '';
+                    matchedForThis.forEach(p => {
+                        const isOverlap = currentMatchesMap[p].length > 1;
+                        tooltipText += `• ${p}`;
+                        if (isOverlap) {
+                            const otherGroups = currentMatchesMap[p].filter(t => t !== group.title);
+                            tooltipText += ` (also in: ${otherGroups.join(', ')})`;
+                        }
+                        tooltipText += '\n';
+                    });
+                    badge.setAttribute('aria-label', tooltipText.trim());
+                    badge.setAttribute('data-tooltip-position', 'top');
+                } else {
+                    badge.setAttribute('aria-label', 'No plugins match these keywords.');
+                    badge.setAttribute('data-tooltip-position', 'top');
+                }
+            };
+
+            // Store the updater function so we can call it when ANY keyword box changes
+            badgeUpdaters.push(updateBadge);
+
+            kwSetting.addTextArea(t => {
+                t.inputEl.classList.add('my-org-keywords-input');
+                t.setValue(group.keywords).onChange(async v => {
+                    this.plugin.settings.groups[index].keywords = v;
+
+                    // 1. Recalculate overlaps globally
+                    const newMatchesMap = recalculateAllMatches();
+
+                    // 2. Tell all badges to update themselves in-place
+                    badgeUpdaters.forEach(update => update(newMatchesMap));
+
+                    // 3. Save quietly. NO this.display() here!
+                    await this.plugin.saveSettings(true);
+                });
+            });
         });
+
+        // Render the initial states for all badges on page load
+        const initialMatchesMap = recalculateAllMatches();
+        badgeUpdaters.forEach(update => update(initialMatchesMap));
 
         const btnDiv = containerEl.createDiv({ cls: 'my-org-add-group-container' });
         const btn = btnDiv.createEl('button', { text: '+ Add group', cls: 'mod-cta my-org-add-group-btn' });
-        
+
         btn.onclick = async () => {
             this.plugin.settings.groups.push({ title: 'New Folder', keywords: '', items: [] });
             await this.plugin.saveSettings();

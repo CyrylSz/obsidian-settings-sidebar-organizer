@@ -5,8 +5,16 @@
    ========================================================== */
 
 /* Utility classes used to hide elements */
-.my-org-hidden { display: none !important; }
-.my-org-hide-nav { display: none !important; }
+div.vertical-tab-nav-item.my-org-hidden,
+div.vertical-tab-nav-item.my-org-hide-nav {
+    display: none;
+}
+
+/* Modifies the native save button when disabled */
+.my-org-modal-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 /* --- BUTTON CONTAINER STYLE --- */
 /* The area holding the "+ Add group" button in settings */
@@ -22,7 +30,8 @@
    (like "Community plugins") when Compact Mode is ON */
 .my-org-section-btn {
     position: absolute;
-    right: 10px; /* Default position when collapsible headers are OFF */
+    right: 10px;
+    /* Default position when collapsible headers are OFF */
     top: 50%;
     transform: translateY(-50%);
     cursor: pointer;
@@ -55,7 +64,7 @@
 
 /* Specific styling for the "Ungrouped" folder */
 .my-org-folder.my-org-special {
-    border-top: 1px solid var(--interactive-accent); 
+    border-top: 1px solid var(--interactive-accent);
     margin-top: 5px;
 }
 
@@ -64,9 +73,10 @@
     cursor: pointer;
     padding: 8px 12px;
     font-weight: 600;
-    background-color: var(--background-secondary); 
+    background-color: var(--background-secondary);
     color: var(--text-normal);
-    border-left: 4px solid var(--interactive-accent); /* The colored stripe on the left */
+    border-left: 4px solid var(--interactive-accent);
+    /* The colored stripe on the left */
     display: flex;
     align-items: center;
     border-radius: 0 4px 4px 0;
@@ -96,8 +106,13 @@
 }
 
 /* Hides default browser styles for the details summary element */
-.my-org-folder > summary { list-style: none; }
-.my-org-folder > summary::-webkit-details-marker { display: none; }
+.my-org-folder>summary {
+    list-style: none;
+}
+
+.my-org-folder>summary::-webkit-details-marker {
+    display: none;
+}
 
 /* ==========================================================
    SIDEBAR ITEMS (PLUGINS INSIDE FOLDERS)
@@ -105,7 +120,8 @@
 
 /* The individual plugin items inside your custom folders */
 .my-org-proxy {
-    padding: 6px 12px 6px 32px; /* Left padding creates the indent inside the folder */
+    padding: 6px 12px 6px 32px;
+    /* Left padding creates the indent inside the folder */
     cursor: pointer;
     color: var(--text-muted);
     font-size: 13px;
@@ -132,7 +148,8 @@
 
 /* Base styling for main native headers (e.g., "Core plugins") */
 .vertical-tab-header-group-title {
-    cursor: default; /* Default behavior: not clickable */
+    cursor: default;
+    /* Default behavior: not clickable */
     position: relative;
     transition: color 0.2s;
 }
@@ -157,7 +174,8 @@
     font-size: 10px;
     color: var(--text-faint);
     transition: transform 0.2s;
-    display: none; /* Hidden by default */
+    display: none;
+    /* Hidden by default */
 }
 
 /* Shows the collapse arrow when the feature is enabled */
@@ -300,4 +318,53 @@
 /* The "+ Add group" button width */
 .my-org-add-group-btn {
     width: 200px;
+}
+
+/* ==========================================================
+   MODAL & HOVER TOOLTIPS
+   ========================================================== */
+
+/* Layout for the modal header with description and sort dropdown */
+.my-org-modal-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.my-org-modal-header-row .my-org-modal-desc {
+    margin: 0;
+}
+
+/* Pushes the Sort dropdown leftwards to center over Alias fields */
+.my-org-sort-select {
+    margin-right: 34px;
+}
+
+/* Larger Keywords Box */
+.my-org-keywords-input {
+    min-height: 80px;
+    width: 100%;
+    min-width: 250px;
+    resize: vertical;
+}
+
+/* Subtle, native-looking badge */
+.my-org-match-badge {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 0.85em;
+    padding: 2px 6px;
+    background-color: var(--background-modifier-border);
+    /* Muted background */
+    color: var(--text-muted);
+    /* Less visible by default */
+    border-radius: 4px;
+    cursor: help;
+    transition: all 0.2s ease;
+}
+
+.my-org-match-badge:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
 }
