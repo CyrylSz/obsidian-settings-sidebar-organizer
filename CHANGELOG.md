@@ -7,7 +7,7 @@
 - **Accuracy Fix:** Disabled or hidden plugins are now strictly ignored and no longer falsely inflate the match counter badge.
 - **Quality of Life:** Creating a "+ Add group" now instantly focuses the title input box and highlights the default text so you can start typing immediately. You can also use the Tab key to quickly jump straight into the next box! (Reddit @Miserable_Move_9854 feedback)
 
-# 1.0.7 - 27-05-2026
+## 1.0.7 - 27-05-2026
 - Small cleanups
 
 ## 1.0.6 - Proxy Refresh and Sorting Fixes - 27-05-2026
