@@ -1,0 +1,17 @@
+{
+  "name": "settings-sidebar-organizer",
+  "version": "1.0.5",
+  "description": "Groups Community Plugins into folders, allows renaming, reordering, and compacting the sidebar.",
+  "main": "main.js",
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "obsidian-community",
+    "settings",
+    "sidebar",
+    "organizer"
+  ],
+  "author": "Golomp",
+  "license": "MIT",
+  "dependencies": {}
+}
