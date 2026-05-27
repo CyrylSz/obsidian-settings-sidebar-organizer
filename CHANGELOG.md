@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.6 - Proxy Refresh and Sorting Fixes - 27-05-2026
+- **Fixes** Clear active proxy states on native item clicks and update sorting to use case-insensitive locale comparison
+
 ## 1.0.5 - Hover Tooltip Overhaul and Bug Fixes - 27-05-2026
 - **Instant Tooltips:** Replaced native browser delays with a custom floating window engine. The match counter badge now displays the list of grabbed plugins instantly on hover with a 0ms delay.
 - **Scroll Immunity:** Tooltips automatically dismiss the exact moment you begin scrolling inside the settings menu, preventing awkward visual overlaps.
