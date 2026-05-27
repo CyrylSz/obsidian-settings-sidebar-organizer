@@ -1,6 +1,6 @@
 # 🗂️ Obsidian Settings Sidebar Organizer
 
-**Tame your plugin list.** Group Community Plugins into custom collapsible folders, rename them (alias), reorder them manually, compact the sidebar UI headers, and more...
+**Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, compact the sidebar UI headers, and more...
 
 ![Screenshot](gifs/1.gif)
 
@@ -14,19 +14,19 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 > **Experimental "DOM Hack":**
 > This plugin manipulates the Obsidian UI directly because there is no official API for the settings sidebar.
 > * **Risk:** If Obsidian updates their UI structure (CSS classes), this plugin might break or stop working until updated.
-> * **Stability:** It creates "proxy" buttons. When you click an item in a folder, it programmatically clicks the real, hidden button.
+> * **Stability:** It creates "proxy" buttons. When you click an item in a group, it programmatically clicks the real, hidden button.
 
 ## ✨ Key Features
 
 ### 1. 📂 Grouping & Organization
 * **Custom Folders:** Create your own categories (e.g., "Design", "Automation").
 * **Multi-folder Support:** Plugins can belong to multiple groups at once.
-* **Keyword Matching:** Automatically sorts plugins into folders based on words in their names. Includes a live-updating badge to see your matches on the fly.
+* **Keyword Matching:** Automatically sorts plugins into groups based on words in their names. Includes a live-updating badge to see your matches on the fly (including info about duplications if a plugin matches multiple keywords in different groups).
 * **"Ungrouped" Folder:** Automatically catches any plugin that doesn't match your keywords so nothing gets lost (can be hidden).
 
 ### 2. ✏️ Aliases & Order
-* **Renaming (Aliasing):** Rename plugins in the sidebar to save space or improve clarity.
-* **Sorting Options:** Sort your folders alphabetically, or use Up/Down arrows to manually order them exactly how you want them.
+* **Renaming (Aliasing):** Rename plugins to save space or improve clarity. You can even give the same plugin multiple aliases in different groups if you want.
+* **Sorting Options:** Sort your plugins inside each group alphabetically, or use Up/Down arrows to manually order them exactly how you want them (you can also manually order the groups themselves).
 
 ### 3. 📉 Compact & Clean UI
 * **Compact Mode:** Hides the large "Core plugins" and "Community plugins" tabs. It moves them to small ⚙️ icons in the section headers to improve clarity.
@@ -60,7 +60,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 Everything is configured via **Settings > Settings Sidebar Organizer**:
 
 1.  **Create Group:** Click `+ Add Group`.
-2.  **Assign Plugins:** Type keywords (comma-separated) in the "Keywords" box. Hover over the generated badge to instantly view all matched plugins in real-time (including info about duplications if a plugin matches multiple keywords).
+2.  **Assign Plugins:** Type keywords (comma-separated) in the "Keywords" box.
 3.  **Fine-tune:** Click the **Gear Icon (⚙️)** next to a group to:
     * Set an **Alias** (rename).
     * **Reorder** items manually using the arrows or **Sort** them alphabetically.
