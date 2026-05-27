@@ -60,7 +60,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 Everything is configured via **Settings > Settings Sidebar Organizer**:
 
 1.  **Create Group:** Click `+ Add Group`.
-2.  **Assign Plugins:** Type keywords (comma-separated) in the "Keywords" box. Hover over the generated badge to instantly view all matched plugins in real-time (including duplications if a plugin matches multiple keywords).
+2.  **Assign Plugins:** Type keywords (comma-separated) in the "Keywords" box. Hover over the generated badge to instantly view all matched plugins in real-time (including info about duplications if a plugin matches multiple keywords).
 3.  **Fine-tune:** Click the **Gear Icon (⚙️)** next to a group to:
     * Set an **Alias** (rename).
     * **Reorder** items manually using the arrows or **Sort** them alphabetically.
