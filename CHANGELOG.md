@@ -1,6 +1,6 @@
 # Changelog
 
-# 1.0.7 - 27-05-2026
+## 1.0.7 - 27-05-2026
 - Small cleanups
 
 ## 1.0.6 - Proxy Refresh and Sorting Fixes - 27-05-2026
