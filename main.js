@@ -40,8 +40,16 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         });
 
         this.registerDomEvent(document, 'click', (evt) => {
+            // Kill active states on the proxies when user clicks a NATIVE sidebar item
+            if (evt.isTrusted && evt.target instanceof Element) {
+                const clickedTab = evt.target.closest('.vertical-tab-nav-item');
+                if (clickedTab && !clickedTab.classList.contains('my-org-proxy')) {
+                    document.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
+                }
+            }
+
             // Catches the global click and waits for Obsidian to finish rebuilding the Document Object Model
-            if (evt.target.closest('.checkbox-container') || evt.target.closest('button')) {
+            if (evt.target instanceof Element && (evt.target.closest('.checkbox-container') || evt.target.closest('button'))) {
                 // Clear any existing timers if the user clicks rapidly (prevents overlapping chaos)
                 if (this.clickTimer1) clearTimeout(this.clickTimer1);
                 if (this.clickTimer2) clearTimeout(this.clickTimer2);
@@ -500,9 +508,9 @@ class GroupConfigModal extends obsidian.Modal {
         sortSelect.add(new Option('Alias Z-A', 'za'));
         sortSelect.onchange = () => {
             if (sortSelect.value === 'az') {
-                this.items.sort((a, b) => (a.alias || a.name).localeCompare(b.alias || b.name));
+                this.items.sort((a, b) => (a.alias || a.name).localeCompare(b.alias || b.name, undefined, { sensitivity: 'base' }));
             } else if (sortSelect.value === 'za') {
-                this.items.sort((a, b) => (b.alias || b.name).localeCompare(a.alias || a.name));
+                this.items.sort((a, b) => (b.alias || b.name).localeCompare(a.alias || a.name, undefined, { sensitivity: 'base' }));
             }
             sortSelect.value = 'none'; // Revert to placeholder after sorting
             this.checkForChanges();
