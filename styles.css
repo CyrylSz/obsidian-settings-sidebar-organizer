@@ -46,6 +46,13 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     z-index: 10;
 }
 
+/* Hover effect for section gear icons */
+.my-org-section-btn:hover {
+    opacity: 1;
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
 /* Moves the gear button slightly to the left when the collapse arrow is visible */
 .my-org-collapse-enabled .my-org-section-btn {
     right: 35px;
@@ -367,4 +374,43 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 .my-org-match-badge:hover {
     color: var(--text-normal);
     background-color: var(--background-modifier-hover);
+}
+
+/* ==========================================================
+   CUSTOM FLOATING TOOLTIP ENGINE
+   ========================================================== */
+
+/* Fixed layer configuration to decouple layout from scrolling containers */
+.my-org-custom-tooltip {
+    position: fixed;
+    z-index: 99999;
+    background-color: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-shadow: var(--shadow-l);
+    color: var(--text-normal);
+    font-size: 13px;
+    pointer-events: none;
+    /* Prevents event blocking on accidental mouse capture */
+    white-space: nowrap;
+}
+
+/* Individual line entries inside the viewport popup */
+.my-org-tt-line {
+    padding: 2px 0;
+    line-height: 1.4;
+}
+
+/* Specific highlighting rule for active duplications */
+.my-org-tt-name.is-overlap {
+    font-weight: bold;
+    color: var(--text-accent);
+}
+
+/* Secondary meta tracking for background groups list */
+.my-org-tt-others {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    font-style: italic;
 }

@@ -1,0 +1,9 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Obsidian local tracking
+.obsidian/
+
+# Local plugin data
+data.json

@@ -62,59 +62,102 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
             if (evt.target.classList.contains('vertical-tab-header-group-title')) {
                 const header = evt.target;
-                const title = header.innerText.trim();
                 const group = header.parentElement;
                 const itemsContainer = group.querySelector('.vertical-tab-header-group-items');
 
                 if (itemsContainer) {
+                    // LANGUAGE INDEPENDENCE: We use the built-in data-section
+                    const sectionId = itemsContainer.getAttribute('data-section') || header.innerText.trim();
+
                     const isCollapsed = itemsContainer.classList.toggle('is-collapsed');
                     header.classList.toggle('is-collapsed', isCollapsed);
 
                     if (isCollapsed) {
-                        if (!this.settings.collapsedSections.includes(title)) this.settings.collapsedSections.push(title);
+                        if (!this.settings.collapsedSections.includes(sectionId)) this.settings.collapsedSections.push(sectionId);
                     } else {
-                        this.settings.collapsedSections = this.settings.collapsedSections.filter(t => t !== title);
+                        this.settings.collapsedSections = this.settings.collapsedSections.filter(t => t !== sectionId);
                     }
                     this.saveSettings(false);
                     evt.stopPropagation();
                 }
             }
         });
+
+        // Listen to all scroll actions in the capture phase to clear floating tooltips
+        this.registerDomEvent(window, 'scroll', (evt) => {
+            if (this.activeTooltip) {
+                this.activeTooltip.remove();
+                this.activeTooltip = null;
+            }
+        }, { capture: true });
     }
 
     // Manages sidebar observation logic
     startSidebarWatcher() {
-        this.registerInterval(window.setInterval(() => {
-            const sidebar = document.querySelector('.vertical-tab-header-group-items');
+        // Replace the slow setInterval with an instant MutationObserver on the application body
+        this.bodyObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
 
-            if (sidebar) {
-                // Sidebar exists (settings are open)
-                if (!this.observing) {
-                    this.observing = true;
-                    // Listen for changes in the element list
-                    this.observer.observe(sidebar, { childList: true, subtree: true });
-                    // Trigger organization once at start
-                    this.checkAndApply();
-                }
-            } else {
-                // Sidebar does not exist (settings are closed)
-                if (this.observing) {
-                    this.observer.disconnect();
-                    this.observing = false;
-
-                    // INSTANT COLLAPSE: Forget opened folders the moment settings are closed
-                    if (this.settings.startCollapsed) {
-                        this.settings.collapsedGroups = {};
-                        // Save silently so it remembers the state for next time
-                        this.saveSettings(false);
+                // 1. Detect when the Settings window is opened (added to the Document Object Model)
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1 && node.classList.contains('modal-container')) {
+                        const sidebar = node.querySelector('.vertical-tab-header-group-items');
+                        if (sidebar && !this.observing) {
+                            this.observing = true;
+                            this.observer.observe(sidebar, { childList: true, subtree: true });
+                            this.checkAndApply(); // Apply instantly before the screen paints
+                        }
                     }
-                }
-            }
-        }, 100)); // Changed from 1000ms to 100ms for instant reaction
+                });
+
+                // 2. Detect when the Settings window is closed (removed from the Document Object Model)
+                mutation.removedNodes.forEach(node => {
+                    if (node.nodeType === 1 && node.classList.contains('modal-container')) {
+
+                        if (this.activeTooltip) {
+                            this.activeTooltip.remove();
+                            this.activeTooltip = null;
+                        }
+
+                        if (node.querySelector('.vertical-tab-header-group-items')) {
+                            if (this.observing) {
+                                this.observer.disconnect();
+                                this.observing = false;
+                            }
+
+                            // INSTANT COLLAPSE LOGIC
+                            if (this.settings.startCollapsed) {
+                                this.settings.collapsedGroups = {};
+                                this.saveSettings(false);
+
+                                // Obsidian caches the closed modal in memory.
+                                // We must strip the 'open' state from the detached HTML right now, 
+                                // so there is no visual flash when the user reopens the settings!
+                                node.querySelectorAll('.my-org-folder').forEach(folder => {
+                                    folder.removeAttribute('open');
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        });
+
+        // Start observing the main application body for the settings modal
+        this.bodyObserver.observe(document.body, { childList: true });
+
+        // Initial fallback check in case settings are already open when plugin loads
+        const sidebar = document.querySelector('.vertical-tab-header-group-items');
+        if (sidebar && !this.observing) {
+            this.observing = true;
+            this.observer.observe(sidebar, { childList: true, subtree: true });
+            this.checkAndApply();
+        }
     }
 
     onunload() {
         if (this.observer) this.observer.disconnect();
+        if (this.bodyObserver) this.bodyObserver.disconnect();
 
         document.body.classList.remove('my-org-collapse-enabled');
 
@@ -142,26 +185,33 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         if (!this.settings.collapsibleHeaders) return;
         const headers = document.querySelectorAll('.vertical-tab-header-group-title');
         headers.forEach(header => {
-            const title = header.innerText.trim();
-            if (this.settings.collapsedSections.includes(title)) {
-                header.classList.add('is-collapsed');
-                const group = header.parentElement;
-                const items = group.querySelector('.vertical-tab-header-group-items');
-                if (items) items.classList.add('is-collapsed');
+            const group = header.parentElement;
+            const items = group.querySelector('.vertical-tab-header-group-items');
+            if (items) {
+                // Read the safe section ID
+                const sectionId = items.getAttribute('data-section') || header.innerText.trim();
+                if (this.settings.collapsedSections.includes(sectionId)) {
+                    header.classList.add('is-collapsed');
+                    items.classList.add('is-collapsed');
+                }
             }
         });
     }
 
     manageCompactMode() {
-        const sidebar = document.querySelector('.vertical-tab-content-container');
-        const navItems = Array.from(document.querySelectorAll('.vertical-tab-nav-item'));
-        const headers = Array.from(document.querySelectorAll('.vertical-tab-header-group-title'));
-
-        const targets = ['Core plugins', 'Community plugins'];
-        const targetNavItems = navItems.filter(item => targets.includes(item.innerText.trim()));
-        const targetHeaders = headers.filter(h => targets.includes(h.innerText.trim()));
-
         if (this.settings.compactMode) {
+            // Search by immutable setting IDs (language independent)
+            const coreNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="plugins"]');
+            const commNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="community-plugins"]');
+            const targetNavItems = [coreNav, commNav].filter(Boolean);
+
+            const coreSection = document.querySelector('.vertical-tab-header-group-items[data-section="core-plugins"]');
+            const commSection = document.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
+
+            const targetHeaders = [];
+            if (coreSection && coreSection.previousElementSibling) targetHeaders.push(coreSection.previousElementSibling);
+            if (commSection && commSection.previousElementSibling) targetHeaders.push(commSection.previousElementSibling);
+
             targetNavItems.forEach(item => {
                 item.classList.add('my-org-hide-nav');
             });
@@ -171,20 +221,24 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
                 const btn = document.createElement('div');
                 btn.className = 'my-org-section-btn';
-                btn.setAttribute('aria-label', `Manage ${header.innerText}`);
+                btn.setAttribute('aria-label', 'Manage plugins');
                 obsidian.setIcon(btn, 'settings');
 
                 btn.onclick = (e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    const name = header.innerText.trim();
-                    const linkToClick = targetNavItems.find(i => i.innerText.trim() === name);
-                    if (linkToClick) linkToClick.click();
+
+                    // Connect the gear icon with the hidden menu button
+                    if (header === (coreSection && coreSection.previousElementSibling) && coreNav) {
+                        coreNav.click();
+                    } else if (header === (commSection && commSection.previousElementSibling) && commNav) {
+                        commNav.click();
+                    }
                 };
                 header.appendChild(btn);
             });
         } else {
-            targetNavItems.forEach(item => item.classList.remove('my-org-hide-nav'));
+            document.querySelectorAll('.my-org-hide-nav').forEach(item => item.classList.remove('my-org-hide-nav'));
             document.querySelectorAll('.my-org-section-btn').forEach(b => b.remove());
         }
     }
@@ -195,14 +249,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
         // Restore collapse if needed
         if (this.settings.collapsibleHeaders) {
-            const firstCollapsed = this.settings.collapsedSections[0];
-            if (firstCollapsed) {
-                const header = Array.from(document.querySelectorAll('.vertical-tab-header-group-title'))
-                    .find(h => h.innerText.trim() === firstCollapsed);
-                if (header && !header.classList.contains('is-collapsed')) {
-                    this.restoreSectionStates();
-                }
-            }
+            this.restoreSectionStates();
         }
 
         this.organizeSidebar();
@@ -284,13 +331,14 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         let foldersInserted = false;
 
         pluginItems.forEach(item => {
-            const name = item.innerText.trim();
-
-            // Fix for renaming issues: rely on exact settings ID from the document element
+            const uiName = item.innerText.trim();
             const settingId = item.getAttribute('data-setting-id');
-            const isCommunityPlugin = settingId && this.app.plugins.manifests[settingId];
+            const manifest = settingId ? this.app.plugins.manifests[settingId] : null;
 
-            if (!isCommunityPlugin) return;
+            // Ensure it's a valid community plugin
+            if (!manifest) return;
+            const manifestName = manifest.name;
+
             if (item.classList.contains('my-org-hidden')) return;
 
             if (!foldersInserted) {
@@ -301,13 +349,21 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
             let matchedCount = 0;
             for (const group of groupsMap) {
-                if (group.keywords.some(k => name.toLowerCase().includes(k))) {
-                    const config = group.items.find(i => i.name === name);
-                    const displayName = (config && config.alias) ? config.alias : name;
+                // Match against the official manifest name to ensure consistency with the settings modal
+                if (group.keywords.some(k => manifestName.toLowerCase().includes(k))) {
 
-                    const proxy = this.createProxy(displayName, name, item, targetContainer);
+                    // Look up configuration using the official manifest name
+                    const config = group.items.find(i => i.name === manifestName);
+
+                    // Fallback to the User Interface name if no alias is set
+                    const displayName = (config && config.alias) ? config.alias : uiName;
+
+                    // Pass the settingId instead of text for 100% reliable clicking
+                    const proxy = this.createProxy(displayName, settingId, item, targetContainer);
                     group.element.appendChild(proxy);
-                    group.proxies.push({ name: name, element: proxy });
+
+                    // Push manifestName so manual sorting arrays match perfectly
+                    group.proxies.push({ name: manifestName, element: proxy });
 
                     matchedCount++;
                 }
@@ -317,7 +373,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 item.classList.add('my-org-hidden');
             } else {
                 if (this.settings.showUngrouped) {
-                    const proxy = this.createProxy(name, name, item, targetContainer);
+                    const proxy = this.createProxy(uiName, settingId, item, targetContainer);
                     ungroupedDetails.appendChild(proxy);
                     ungroupedCount++;
                     item.classList.add('my-org-hidden');
@@ -356,12 +412,12 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         }, 0);
     }
 
-    createProxy(displayName, realName, originalItem, container) {
+    createProxy(displayName, settingId, originalItem, container) {
         const proxy = document.createElement('div');
         proxy.className = 'my-org-proxy';
         proxy.innerText = displayName;
 
-        // Check if originalItem is still in DOM and active for initial styling
+        // Check if originalItem is still in the Document Object Model and active for initial styling
         if (originalItem && originalItem.classList.contains('is-active')) {
             proxy.classList.add('is-active');
         }
@@ -373,9 +429,8 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             container.querySelectorAll('.my-org-proxy').forEach(p => p.classList.remove('is-active'));
             proxy.classList.add('is-active');
 
-            // Find the current live element in the DOM instead of relying on potentially detached original references
-            const freshTarget = Array.from(container.querySelectorAll('.vertical-tab-nav-item'))
-                .find(el => el.innerText.trim() === realName && !el.classList.contains('my-org-proxy'));
+            // Find the current live element using the exact setting ID attribute
+            const freshTarget = container.querySelector(`.vertical-tab-nav-item[data-setting-id="${settingId}"]:not(.my-org-proxy)`);
 
             if (freshTarget) {
                 freshTarget.click();
@@ -670,13 +725,55 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             // Create Badge
             const badge = kwSetting.nameEl.createSpan({ cls: 'my-org-match-badge' });
 
+            // Render custom floating layout instantly on mouse entry
+            badge.addEventListener('mouseenter', () => {
+                if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
+
+                const tooltipText = badge.myTooltipContent;
+                if (!tooltipText) return;
+
+                const tooltipEl = document.createElement('div');
+                tooltipEl.className = 'my-org-custom-tooltip';
+
+                // Safely parse and generate DOM nodes to prevent XSS vulnerabilities
+                tooltipText.split('\n').forEach(line => {
+                    const lineEl = tooltipEl.createDiv({ cls: 'my-org-tt-line' });
+
+                    if (line.includes('(also in:')) {
+                        const parts = line.split(' (also in:');
+                        lineEl.createSpan({ cls: 'my-org-tt-name is-overlap', text: parts[0] });
+                        lineEl.createSpan({ cls: 'my-org-tt-others', text: ` (also in: ${parts[1]}` });
+                    } else {
+                        lineEl.innerText = line;
+                    }
+                });
+
+                document.body.appendChild(tooltipEl);
+                this.plugin.activeTooltip = tooltipEl;
+
+                // Absolute calculations to map exact viewport location above the badge
+                const badgeRect = badge.getBoundingClientRect();
+                const tooltipRect = tooltipEl.getBoundingClientRect();
+
+                tooltipEl.style.left = `${badgeRect.left + (badgeRect.width / 2) - (tooltipRect.width / 2)}px`;
+                tooltipEl.style.top = `${badgeRect.top - tooltipRect.height - 8}px`;
+            });
+
+            // Wipe out the floating layer immediately when mouse leaves the bounding box
+            badge.addEventListener('mouseleave', () => {
+                if (this.plugin.activeTooltip) {
+                    this.plugin.activeTooltip.remove();
+                    this.plugin.activeTooltip = null;
+                }
+            });
+
             // Logic to update a single badge's text and tooltip WITHOUT rebuilding the page
             const updateBadge = (currentMatchesMap) => {
                 const matchedForThis = Object.keys(currentMatchesMap).filter(p => currentMatchesMap[p].includes(group.title));
                 badge.innerText = `${matchedForThis.length} matches ⓘ`;
 
+                let tooltipText = '';
                 if (matchedForThis.length > 0) {
-                    let tooltipText = '';
                     matchedForThis.forEach(p => {
                         const isOverlap = currentMatchesMap[p].length > 1;
                         tooltipText += `• ${p}`;
@@ -686,12 +783,12 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                         }
                         tooltipText += '\n';
                     });
-                    badge.setAttribute('aria-label', tooltipText.trim());
-                    badge.setAttribute('data-tooltip-position', 'top');
                 } else {
-                    badge.setAttribute('aria-label', 'No plugins match these keywords.');
-                    badge.setAttribute('data-tooltip-position', 'top');
+                    tooltipText = 'No plugins match these keywords.';
                 }
+
+                // Cache plain text string safely onto custom node attribute
+                badge.myTooltipContent = tooltipText.trim();
             };
 
             // Store the updater function so we can call it when ANY keyword box changes
