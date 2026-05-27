@@ -414,3 +414,19 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     font-size: 0.9em;
     font-style: italic;
 }
+
+/* Main plugin identifier color (e.g. Enhancing Export) */
+.my-org-tt-identifier {
+    color: var(--text-accent);
+    font-weight: 500;
+}
+
+/* Style for brackets and "User Interface:" text */
+.my-org-tt-muted {
+    color: var(--text-muted);
+}
+
+/* Pure white for user-assigned custom name */
+.my-org-tt-white {
+    color: var(--text-normal);
+}

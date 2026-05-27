@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.8 - Performance Boost, Tooltip Changes and QoL - 27-05-2026
+- **Performance Overhaul:** Drastically reduced background resource usage. The plugin now completely "goes to sleep" when the settings window is closed, saving significant processor and Random Access Memory resources. (Reddit @AllMight_74 feedback)
+- **Lightning Fast Sorting:** Swapped heavy text-scanning loops for instant DOM querying. The sidebar should still orginize instantly, even on older computers.
+- **Smarter Tooltips:** Redesigned the hover tooltips to be much cleaner!
+- **Accuracy Fix:** Disabled or hidden plugins are now strictly ignored and no longer falsely inflate the match counter badge.
+- **Quality of Life:** Creating a "+ Add group" now instantly focuses the title input box and highlights the default text so you can start typing immediately. You can also use the Tab key to quickly jump straight into the next box! (Reddit @Miserable_Move_9854 feedback)
+
 # 1.0.7 - 27-05-2026
 - Small cleanups
 

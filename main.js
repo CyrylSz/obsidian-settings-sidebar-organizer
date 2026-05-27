@@ -40,6 +40,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         });
 
         this.registerDomEvent(document, 'click', (evt) => {
+            if (!document.querySelector('.modal-container')) return;
             // Kill active states on the proxies when user clicks a NATIVE sidebar item
             if (evt.isTrusted && evt.target instanceof Element) {
                 const clickedTab = evt.target.closest('.vertical-tab-nav-item');
@@ -50,19 +51,8 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
             // Catches the global click and waits for Obsidian to finish rebuilding the Document Object Model
             if (evt.target instanceof Element && (evt.target.closest('.checkbox-container') || evt.target.closest('button'))) {
-                // Clear any existing timers if the user clicks rapidly (prevents overlapping chaos)
-                if (this.clickTimer1) clearTimeout(this.clickTimer1);
-                if (this.clickTimer2) clearTimeout(this.clickTimer2);
-                if (this.clickTimer3) clearTimeout(this.clickTimer3);
-
-                // 1. Catches fast computers almost instantly
-                this.clickTimer1 = setTimeout(() => this.checkAndApply(), 100);
-
-                // 2. Catches average computers and moderate vaults
-                this.clickTimer2 = setTimeout(() => this.checkAndApply(), 500);
-
-                // 3. Catches very slow computers or incredibly heavy vaults
-                this.clickTimer3 = setTimeout(() => this.checkAndApply(), 1500);
+                if (this.clickTimer) clearTimeout(this.clickTimer);
+                this.clickTimer = setTimeout(() => this.checkAndApply(), 150);
             }
 
             if (!this.settings.collapsibleHeaders) return;
@@ -93,6 +83,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
         // Listen to all scroll actions in the capture phase to clear floating tooltips
         this.registerDomEvent(window, 'scroll', (evt) => {
+            if (!document.querySelector('.modal-container')) return;
             if (this.activeTooltip) {
                 this.activeTooltip.remove();
                 this.activeTooltip = null;
@@ -273,20 +264,15 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             return;
         }
 
-        const pluginNames = Object.values(this.app.plugins.manifests).map(m => m.name);
-        const allNavItems = Array.from(document.querySelectorAll('.vertical-tab-nav-item'));
-        if (allNavItems.length === 0) {
-            this.isOrganizing = false;
-            return;
-        }
+        let targetContainer = document.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
 
-        let targetContainer = null;
-        for (const item of allNavItems) {
-            if (pluginNames.includes(item.innerText.trim()) || pluginNames.some(p => item.innerText.includes(p))) {
-                targetContainer = item.parentElement;
-                break;
+        if (!targetContainer) {
+            const firstCommunityPlugin = document.querySelector('.vertical-tab-nav-item[data-setting-id]');
+            if (firstCommunityPlugin) {
+                targetContainer = firstCommunityPlugin.parentElement;
             }
         }
+
         if (!targetContainer) {
             this.isOrganizing = false;
             return;
@@ -643,20 +629,32 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
         containerEl.createEl('hr');
         new obsidian.Setting(containerEl).setName('Your groups').setHeading();
 
-        const allPlugins = this.app.plugins && this.app.plugins.manifests
-            ? Object.values(this.app.plugins.manifests).map(m => m.name) : [];
+        const activeNavItems = Array.from(document.querySelectorAll('.vertical-tab-nav-item[data-setting-id]'));
+        const activePlugins = activeNavItems.map(item => {
+            const id = item.getAttribute('data-setting-id');
+            const manifest = this.app.plugins && this.app.plugins.manifests ? this.app.plugins.manifests[id] : null;
+            if (manifest) {
+                return {
+                    id: id,
+                    manifestName: manifest.name,
+                    uiName: item.textContent.trim()
+                };
+            }
+            return null;
+        }).filter(Boolean);
 
         // Helper function to calculate overlaps across all groups
         const recalculateAllMatches = () => {
             const pluginMatches = {};
-            allPlugins.forEach(p => pluginMatches[p] = []);
+
+            activePlugins.forEach(p => pluginMatches[p.manifestName] = { uiName: p.uiName, groups: [] });
 
             this.plugin.settings.groups.forEach(g => {
                 const kws = g.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
                 if (kws.length > 0) {
-                    allPlugins.forEach(p => {
-                        if (kws.some(k => p.toLowerCase().includes(k))) {
-                            pluginMatches[p].push(g.title);
+                    activePlugins.forEach(p => {
+                        if (kws.some(k => p.manifestName.toLowerCase().includes(k))) {
+                            pluginMatches[p.manifestName].groups.push(g.title);
                         }
                     });
                 }
@@ -719,14 +717,25 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 this.display();
             }));
 
-            new obsidian.Setting(div).setName('Title').addText(t => t.setValue(group.title).onChange(async v => {
-                const oldState = this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
-                delete this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
-                if (oldState !== undefined) this.plugin.settings.collapsedGroups[v] = oldState;
+            new obsidian.Setting(div).setName('Title').addText(t => {
+                t.setValue(group.title).onChange(async v => {
+                    const oldState = this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
+                    delete this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
+                    if (oldState !== undefined) this.plugin.settings.collapsedGroups[v] = oldState;
 
-                this.plugin.settings.groups[index].title = v;
-                await this.plugin.saveSettings();
-            }));
+                    this.plugin.settings.groups[index].title = v;
+                    await this.plugin.saveSettings();
+                });
+
+                // Use Tab key for navigation to skip navigation buttons on the right
+                t.inputEl.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                        e.preventDefault(); // Prevent default browser behavior
+                        const textarea = div.querySelector('.my-org-keywords-input');
+                        if (textarea) textarea.focus();
+                    }
+                });
+            });
 
             const kwSetting = new obsidian.Setting(div).setName('Keywords');
 
@@ -737,29 +746,42 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             badge.addEventListener('mouseenter', () => {
                 if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
 
-                const tooltipText = badge.myTooltipContent;
-                if (!tooltipText) return;
+                const tooltipData = badge.tooltipDataObject;
+                if (!tooltipData) return;
 
                 const tooltipEl = document.createElement('div');
                 tooltipEl.className = 'my-org-custom-tooltip';
 
-                // Safely parse and generate DOM nodes to prevent XSS vulnerabilities
-                tooltipText.split('\n').forEach(line => {
-                    const lineEl = tooltipEl.createDiv({ cls: 'my-org-tt-line' });
+                if (tooltipData.length === 0) {
+                    tooltipEl.createDiv({ cls: 'my-org-tt-line', text: 'No plugins match these keywords.' });
+                } else {
+                    tooltipData.forEach(item => {
+                        const lineEl = tooltipEl.createDiv({ cls: 'my-org-tt-line' });
 
-                    if (line.includes('(also in:')) {
-                        const parts = line.split(' (also in:');
-                        lineEl.createSpan({ cls: 'my-org-tt-name is-overlap', text: parts[0] });
-                        lineEl.createSpan({ cls: 'my-org-tt-others', text: ` (also in: ${parts[1]}` });
-                    } else {
-                        lineEl.innerText = line;
-                    }
-                });
+                        // 1. Extra alignment space for digits 1 to 9 (using non-breaking space)
+                        const space = item.index < 10 ? '\u00A0' : '';
+                        lineEl.createSpan({ text: `${space}${item.index}. ` });
+
+                        // 2. Colored Identifier
+                        lineEl.createSpan({ cls: 'my-org-tt-identifier', text: item.manifestName });
+
+                        // 3. Grayed out "User Interface:" and white name (only if they differ)
+                        if (item.uiName) {
+                            lineEl.createSpan({ cls: 'my-org-tt-muted', text: ' (sidebar: ' });
+                            lineEl.createSpan({ cls: 'my-org-tt-white', text: item.uiName });
+                            lineEl.createSpan({ cls: 'my-org-tt-muted', text: ')' });
+                        }
+
+                        // 4. Other folders where the plugin is located
+                        if (item.otherGroups.length > 0) {
+                            lineEl.createSpan({ cls: 'my-org-tt-others', text: ` (also in: ${item.otherGroups.join(', ')})` });
+                        }
+                    });
+                }
 
                 document.body.appendChild(tooltipEl);
                 this.plugin.activeTooltip = tooltipEl;
 
-                // Absolute calculations to map exact viewport location above the badge
                 const badgeRect = badge.getBoundingClientRect();
                 const tooltipRect = tooltipEl.getBoundingClientRect();
 
@@ -775,28 +797,27 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 }
             });
 
-            // Logic to update a single badge's text and tooltip WITHOUT rebuilding the page
+            // Instead of generating text, create an object data structure for the tooltip
             const updateBadge = (currentMatchesMap) => {
-                const matchedForThis = Object.keys(currentMatchesMap).filter(p => currentMatchesMap[p].includes(group.title));
-                badge.innerText = `${matchedForThis.length} matches ⓘ`;
+                const matchedKeys = Object.keys(currentMatchesMap).filter(manifestName =>
+                    currentMatchesMap[manifestName].groups.includes(group.title)
+                );
 
-                let tooltipText = '';
-                if (matchedForThis.length > 0) {
-                    matchedForThis.forEach(p => {
-                        const isOverlap = currentMatchesMap[p].length > 1;
-                        tooltipText += `• ${p}`;
-                        if (isOverlap) {
-                            const otherGroups = currentMatchesMap[p].filter(t => t !== group.title);
-                            tooltipText += ` (also in: ${otherGroups.join(', ')})`;
-                        }
-                        tooltipText += '\n';
-                    });
-                } else {
-                    tooltipText = 'No plugins match these keywords.';
+                badge.innerText = `${matchedKeys.length} matches ⓘ`;
+
+                if (matchedKeys.length > 0) {
+                    matchedKeys.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
                 }
 
-                // Cache plain text string safely onto custom node attribute
-                badge.myTooltipContent = tooltipText.trim();
+                badge.tooltipDataObject = matchedKeys.map((manifestName, index) => {
+                    const matchData = currentMatchesMap[manifestName];
+                    return {
+                        index: index + 1,
+                        manifestName: manifestName,
+                        uiName: matchData.uiName !== manifestName ? matchData.uiName : null,
+                        otherGroups: matchData.groups.filter(t => t !== group.title)
+                    };
+                });
             };
 
             // Store the updater function so we can call it when ANY keyword box changes
@@ -830,6 +851,14 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             this.plugin.settings.groups.push({ title: 'New Folder', keywords: '', items: [] });
             await this.plugin.saveSettings();
             this.display();
+
+            // Automatically set cursor to the title of the newly added group
+            const titleInputs = containerEl.querySelectorAll('.my-org-group-card input[type="text"]');
+            if (titleInputs.length > 0) {
+                const lastInput = titleInputs[titleInputs.length - 1];
+                lastInput.focus();
+                lastInput.select(); // Selects "New Folder" to overwrite it immediately
+            }
         };
     }
 }
