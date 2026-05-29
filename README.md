@@ -21,14 +21,18 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 ### 1. 📂 Grouping & Organization
 * **Custom Folders:** Create your own categories (e.g., "Design", "Automation").
 * **Multi-folder Support:** Plugins can belong to multiple groups at once.
-* **Keyword Matching:** Automatically sorts plugins into groups based on words in their names. Includes a live-updating badge to see your matches on the fly (including info about duplications if a plugin matches multiple keywords in different groups).
+* **Keyword Matching:** Sorts plugins into groups based on keywords in their names. Includes a live-updating badge to see your matches on the fly (info about duplications, if plugin is disabled, if it has no ui, and more).
 * **"Ungrouped" Folder:** Automatically catches any plugin that doesn't match your keywords so nothing gets lost (can be hidden).
 
 ### 2. ✏️ Aliases & Order
 * **Renaming (Aliasing):** Rename plugins to save space or improve clarity. You can even give the same plugin multiple aliases in different groups if you want.
-* **Sorting Options:** Sort your plugins inside each group alphabetically, or use Up/Down arrows to manually order them exactly how you want them (you can also manually order the groups themselves).
+* **Sorting Options:** Sort your plugins inside each group alphabetically, or use drag & drop to manually order them exactly how you want them (you can also manually order the groups themselves).
 
-### 3. 📉 Compact & Clean UI
+### 3. 📝 Plugin Management & Notes
+* **Plugin Toggles:** Enable or disable your plugins directly from the group configuration menu.
+* **Custom Notes:** Add personal notes to any plugin (e.g., why you disabled it or what it does). Hover over the note icon to read it.
+
+### 4. 📉 Compact & Clean UI
 * **Compact Mode:** Hides the large "Core plugins" and "Community plugins" tabs. It moves them to small ⚙️ icons in the section headers to improve clarity.
 * **Collapsible Headers:** Allows you to fold the main "Options", "Core plugins", and "Community plugins" sections.
 * **Collapse by Default:** Option to automatically collapse all groups each time you reopen the settings menu (instead of saving exactly how you left them).
@@ -63,4 +67,6 @@ Everything is configured via **Settings > Settings Sidebar Organizer**:
 2.  **Assign Plugins:** Type keywords (comma-separated) in the "Keywords" box.
 3.  **Fine-tune:** Click the **Gear Icon (⚙️)** next to a group to:
     * Set an **Alias** (rename).
-    * **Reorder** items manually using the arrows or **Sort** them alphabetically.
+    * **Reorder** items manually via drag & drop or **Sort** them alphabetically.
+    * **Toggle** plugins on/off.
+    * Write **Notes** for your plugins.
