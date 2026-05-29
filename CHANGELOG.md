@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 - Toggles, Notes, and Massive QoL Improvements - 29-05-2026
+- **Plugin Toggles:** You can now enable and disable plugins directly from the group configuration window! Changes apply smoothly only after you click "Save changes", so your sidebar doesn't flash annoyingly.
+- **Plugin Notes:** Added the ability to write custom notes for any plugin. Just hover over the new note icon to read them!
+- **Plugin Deletion:** Added delete confirmation popups for groups.Group deletion triggers a 15-second grace period, letting you quickly delete multiple groups.
+- **Flawless Detection:** Completely rebuilt the plugin scanner using Obsidian's native API. It now categorizes even those plugins that don't have a settings menu.
+- **Better Tooltips:** The match counter hover badge now splits plugins into two clean categories (with/without a settings menu) and respects your custom sorting order.
+- **Bug Fixes:** Added drag & drop instead of arrows inside group settings, and many more...
+
 ## 1.0.8 - Performance Boost, Tooltip Changes and QoL - 27-05-2026
 - **Performance Overhaul:** Drastically reduced background resource usage. The plugin now completely "goes to sleep" when the settings window is closed, saving significant processor and Random Access Memory resources. (Reddit @AllMight_74 feedback)
 - **Lightning Fast Sorting:** Swapped heavy text-scanning loops for instant DOM querying. The sidebar should still orginize instantly, even on older computers.

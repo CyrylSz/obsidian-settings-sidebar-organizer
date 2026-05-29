@@ -13,7 +13,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 /* Modifies the native save button when disabled */
 .my-org-modal-actions button:disabled {
     opacity: 0.5;
-    cursor: not-allowed;
+    pointer-events: none;
 }
 
 /* --- BUTTON CONTAINER STYLE --- */
@@ -212,7 +212,10 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     margin-top: 15px;
     max-height: 60vh;
     overflow-y: auto;
-    padding-right: 5px;
+    padding: 12px;
+    background-color: var(--background-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
 }
 
 /* A single row (plugin) inside the popup list */
@@ -254,60 +257,64 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     gap: 2px;
 }
 
-/* The UP/DOWN arrow buttons inside the popup */
-.my-org-modal-btn {
-    padding: 2px 6px;
-    cursor: pointer;
+/* The drag handle grip icon */
+.my-org-modal-drag-handle {
+    padding: 2px 4px;
+    cursor: grab;
     color: var(--text-muted);
-    border-radius: 4px;
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
 }
 
-/* Hover effect for UP/DOWN arrow buttons */
-.my-org-modal-btn:hover {
-    background-color: var(--background-modifier-hover);
+.my-org-modal-drag-handle:hover {
+    opacity: 1;
     color: var(--text-normal);
 }
 
-/* The "Reset defaults" button inside the popup */
-.my-org-btn-reset {
-    background-color: var(--interactive-normal);
-    color: var(--text-normal);
-    border: 1px solid var(--background-modifier-border);
-    box-shadow: var(--input-shadow);
-    cursor: pointer;
-    transition: background-color 0.1s ease;
-    margin-right: auto;
+.my-org-modal-drag-handle:active {
+    cursor: grabbing;
 }
 
-/* Hover effect for the reset button */
-.my-org-btn-reset:hover {
-    background-color: var(--interactive-hover);
-    color: var(--text-normal);
+/* State when a row is being dragged */
+.my-org-modal-item.is-dragging {
+    opacity: 0.4;
+    background-color: var(--background-modifier-active-hover);
 }
 
-/* The descriptive text at the top of the popup */
+/* Drop indicators (blue lines) */
+.my-org-modal-item.drop-target-above {
+    box-shadow: 0 -2px 0 var(--interactive-accent);
+}
+
+.my-org-modal-item.drop-target-below {
+    box-shadow: 0 2px 0 var(--interactive-accent);
+}
+
+/* The descriptive text at the top */
 .my-org-modal-desc {
     font-size: 0.8em;
     color: var(--text-muted);
 }
 
-/* Container for the action buttons at the bottom of the popup */
+/* Container for the action buttons at the bottom */
 .my-org-modal-actions {
-    margin-top: 20px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
+    margin-top: 0px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+/* Add slight spacing between modal title and description */
+.my-org-wide-modal .setting-item-heading .setting-item-description {
+    padding-top: 8px;
 }
 
 /* Text shown when no plugins match the keywords */
 .my-org-modal-empty {
     color: var(--text-muted);
     font-style: italic;
-}
-
-/* Faded appearance when a button cannot be clicked (e.g., move UP on the first item) */
-.my-org-modal-btn.is-disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
 }
 
 /* ==========================================================
@@ -343,9 +350,17 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     margin: 0;
 }
 
-/* Pushes the Sort dropdown leftwards to center over Alias fields */
+/* Centered container with width matching the alias field and margin offset */
+.my-org-sort-container {
+    width: 150px;
+    display: flex;
+    justify-content: center;
+    margin-right: 14px;
+    /* 5px(list-padding) + 8px(item-padding) + 1px(border) = perfect edge alignment */
+}
+
 .my-org-sort-select {
-    margin-right: 34px;
+    margin-right: 0;
 }
 
 /* Larger Keywords Box */
@@ -392,7 +407,6 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     color: var(--text-normal);
     font-size: 13px;
     pointer-events: none;
-    /* Prevents event blocking on accidental mouse capture */
     white-space: nowrap;
 }
 
@@ -426,7 +440,180 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     color: var(--text-muted);
 }
 
-/* Pure white for user-assigned custom name */
+/* Color for user-assigned custom name */
 .my-org-tt-white {
-    color: var(--text-normal);
+    color: var(--text-accent);
+}
+
+/* Faded appearance for edge arrows in the group settings menu */
+.my-org-group-arrow-disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* ==========================================================
+   NOTES, TOOLTIPS & LIST MODIFICATIONS
+   ========================================================== */
+
+/* Styling for tooltip rows associated with disabled plugins */
+.my-org-tt-line.is-disabled {
+    opacity: 0.5;
+}
+
+.my-org-tt-status {
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+/* Dim text for disabled plugins in the modal list */
+.my-org-modal-item-name.is-disabled {
+    opacity: 0.5;
+    font-style: italic;
+}
+
+/* Note Input Area */
+.my-org-note-textarea {
+    width: 100%;
+    min-height: 150px;
+    margin-bottom: 15px;
+    resize: vertical;
+}
+
+/* Fixed width for the note button to mathematically calculate alignment */
+.my-org-note-btn {
+    opacity: 0.4;
+    width: 28px;
+    display: flex;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.my-org-note-btn:hover {
+    opacity: 1;
+}
+
+.my-org-note-btn.has-note {
+    opacity: 1;
+    color: var(--text-accent);
+}
+
+/* Tooltip container tailored for multi-line notes */
+.my-org-note-tooltip {
+    max-width: 300px;
+    white-space: pre-wrap;
+    text-align: center;
+}
+
+/* Container for UI-less plugins */
+.my-org-list2-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* ==========================================================
+   UI POLISH & TOOLBAR ALIGNMENT
+   ========================================================== */
+
+/* Widen modal for long names but keep it reasonable */
+.modal.my-org-wide-modal {
+    width: 700px;
+    max-width: 95vw;
+}
+
+/* Push switch away from arrows, keep it close to the plugin name */
+.my-org-plugin-toggle {
+    margin-left: 15px;
+    /* Creates space between down-arrow and toggle */
+    margin-right: 5px;
+    /* Keeps the plugin name close */
+    display: flex;
+    align-items: center;
+}
+
+/* Center save button at the very bottom */
+.my-org-modal-actions.my-org-actions-centered {
+    justify-content: center;
+    margin-top: 15px;
+}
+
+.my-org-modal-actions.my-org-actions-centered button {
+    font-size: 15px;
+    padding: 0 25px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Toolbar row */
+.my-org-toolbar-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    margin-top: 5px;
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.my-org-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.my-org-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.my-org-sort-container {
+    width: 150px;
+    display: flex;
+    justify-content: center;
+}
+
+.my-org-notes-header {
+    width: 28px;
+    min-width: 28px;
+    max-width: 28px;
+    display: flex;
+    justify-content: center;
+    overflow: visible;
+}
+
+/* Styles for headers in custom tooltips */
+.my-org-tt-header {
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-top: 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: 2px;
+}
+
+.my-org-tt-header:first-child {
+    margin-top: 0;
+}
+
+/* Styles for List 2 header in modal */
+.my-org-modal-list-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    margin-top: 5px;
+}
+
+/* Horizontal divider between lists */
+.my-org-modal-divider {
+    border: 0;
+    border-top: 1px solid var(--background-modifier-border);
+    margin: 15px 0 10px 0;
 }
