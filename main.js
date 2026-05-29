@@ -651,25 +651,29 @@ class GroupConfigModal extends obsidian.Modal {
         this.saveBtn.disabled = true;
         this.saveBtn.onclick = async () => {
             this.plugin.settings.groups[this.groupIndex].items = this.items;
-            
+
             // Just save data, don't rebuild UI yet because we are about to block the thread
             await this.plugin.saveSettings(false);
 
             let stateChanged = false;
+            const pluginManager = this.app.plugins;
+
             for (const [id, willEnable] of Object.entries(this.pendingStates)) {
+                if (id === this.plugin.manifest.id) continue; // Safety check: prevent the plugin from disabling itself
+
                 const wasEnabled = this.initialStates[id];
                 if (willEnable && !wasEnabled) {
-                    this.app.plugins.enabledPlugins.add(id);
-                    await this.app.plugins.enablePlugin(id);
+                    pluginManager.enabledPlugins.add(id);
+                    await pluginManager.enablePlugin(id);
                     stateChanged = true;
                 } else if (!willEnable && wasEnabled) {
-                    this.app.plugins.enabledPlugins.delete(id);
-                    await this.app.plugins.disablePlugin(id);
+                    pluginManager.enabledPlugins.delete(id);
+                    await pluginManager.disablePlugin(id);
                     stateChanged = true;
                 }
             }
 
-            if (this.app.plugins.requestSave) this.app.plugins.requestSave();
+            if (stateChanged && pluginManager.requestSave) pluginManager.requestSave();
 
             this.close();
 
@@ -693,7 +697,7 @@ class GroupConfigModal extends obsidian.Modal {
 
             if (isList1) {
                 row.classList.add('my-org-draggable-row');
-                
+
                 const dragHandle = ctrls.createDiv({ cls: 'my-org-modal-drag-handle' });
                 obsidian.setIcon(dragHandle, 'menu');
 
@@ -1168,21 +1172,21 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
 
                 if (matchedKeys.length > 0) {
                     const savedOrder = group.items ? group.items.map(i => i.id || i.name) : [];
-                    
+
                     matchedKeys.sort((a, b) => {
                         const nameA = currentMatchesMap[a].manifestName;
                         const nameB = currentMatchesMap[b].manifestName;
-                        
+
                         let indexA = savedOrder.indexOf(a);
                         if (indexA === -1) indexA = savedOrder.indexOf(nameA);
-                        
+
                         let indexB = savedOrder.indexOf(b);
                         if (indexB === -1) indexB = savedOrder.indexOf(nameB);
-                        
+
                         if (indexA !== -1 && indexB !== -1) return indexA - indexB;
                         if (indexA !== -1) return -1;
                         if (indexB !== -1) return 1;
-                        
+
                         return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
                     });
                 }
