@@ -1,12 +1,15 @@
 # Changelog
 
-## 1.1.1 - Toggles, Notes, and Massive QoL Improvements - 29-05-2026
+## 1.1.2 - Toggles, Notes, and Massive QoL Improvements - 29-05-2026
 - **Plugin Toggles:** You can now enable and disable plugins directly from the group configuration window! Changes apply smoothly only after you click "Save changes", so your sidebar doesn't flash annoyingly.
 - **Plugin Notes:** Added the ability to write custom notes for any plugin. Just hover over the new note icon to read them! (Reddit @Responsible-Slide-26 feedback)
 - **Plugin Deletion:** Added delete confirmation popups for groups.Group deletion triggers a 15-second grace period, letting you quickly delete multiple groups.
 - **Flawless Detection:** Completely rebuilt the plugin scanner using Obsidian's native API. It now categorizes even those plugins that don't have a settings menu.
 - **Better Tooltips:** The match counter hover badge now splits plugins into two clean categories (with/without a settings menu) and respects your custom sorting order.
 - **Bug Fixes:** Added drag & drop instead of arrows inside group settings, and many more...
+
+## 1.1.1 - 29-05-2026
+- Error... bruh
 
 ## 1.1.0 - 29-05-2026
 - Error
