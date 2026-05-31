@@ -213,7 +213,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     max-height: 60vh;
     overflow-y: auto;
     padding: 12px;
-    background-color: var(--background-secondary);
+    background-color: var(--background-primary-alt);
     border-radius: 8px;
     border: 1px solid var(--background-modifier-border);
 }
@@ -224,7 +224,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     align-items: center;
     gap: 10px;
     padding: 8px;
-    background-color: var(--background-primary);
+    background-color: var(--background-secondary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 6px;
     flex-shrink: 0;
@@ -251,10 +251,12 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     width: 150px;
 }
 
-/* Container for the UP/DOWN arrow buttons */
+/* Container for the drag handle and toggle */
 .my-org-modal-controls {
     display: flex;
     gap: 2px;
+    flex-shrink: 0;
+    align-items: center;
 }
 
 /* The drag handle grip icon */
@@ -355,8 +357,8 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     width: 150px;
     display: flex;
     justify-content: center;
-    margin-right: 14px;
-    /* 5px(list-padding) + 8px(item-padding) + 1px(border) = perfect edge alignment */
+    margin-right: 1px;
+    /* 1px(border) = perfect edge alignment with input boxes below */
 }
 
 .my-org-sort-select {
@@ -505,6 +507,14 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     text-align: center;
 }
 
+/* Tooltip for sidebar notes on right click */
+.my-org-sidebar-note-tooltip {
+    max-width: 250px;
+    white-space: pre-wrap;
+    text-align: left;
+    pointer-events: none;
+}
+
 /* Container for UI-less plugins */
 .my-org-list2-container {
     display: flex;
@@ -523,14 +533,35 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     max-width: 95vw;
 }
 
-/* Push switch away from arrows, keep it close to the plugin name */
+/* Push switch away from drag handle, keep it close to the plugin name */
 .my-org-plugin-toggle {
     margin-left: 15px;
-    /* Creates space between down-arrow and toggle */
     margin-right: 5px;
-    /* Keeps the plugin name close */
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Force strict bounding box so the native toggle doesn't bleed over the text */
+body .my-org-plugin-toggle .checkbox-container {
+    margin: 0;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Ensure the invisible, absolutely positioned input never escapes the switch bounds */
+body .my-org-plugin-toggle .checkbox-container input[type="checkbox"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
 }
 
 /* Center save button at the very bottom */
@@ -590,12 +621,46 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 
 /* Styles for headers in custom tooltips */
 .my-org-tt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-weight: 600;
     color: var(--text-muted);
     margin-top: 12px;
     margin-bottom: 4px;
+    padding-bottom: 4px;
     border-bottom: 1px solid var(--background-modifier-border);
-    padding-bottom: 2px;
+}
+
+.my-org-tt-header-title {
+    white-space: nowrap;
+}
+
+.my-org-path-input {
+    width: 210px;
+}
+
+.my-org-sync-icon {
+    cursor: pointer;
+}
+
+.my-org-sync-icon.is-active {
+    color: var(--text-accent);
+    opacity: 1;
+}
+
+.my-org-note-fallback {
+    font-style: italic;
+    opacity: 0.7;
+}
+
+.my-org-modal-help-text {
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    border-bottom: 1px dashed var(--background-modifier-border);
+    padding-bottom: 4px;
+    font-size: 0.9em;
 }
 
 .my-org-tt-header:first-child {

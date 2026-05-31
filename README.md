@@ -21,7 +21,7 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 ### 1. 📂 Grouping & Organization
 * **Custom Folders:** Create your own categories (e.g., "Design", "Automation").
 * **Multi-folder Support:** Plugins can belong to multiple groups at once.
-* **Keyword Matching:** Sorts plugins into groups based on keywords in their names. Includes a live-updating badge to see your matches on the fly (info about duplications, if plugin is disabled, if it has no ui, and more).
+* **Keyword Matching:** Sorts plugins into groups based on keywords separated by commas (including spaces). Hover over a live-updating badge to see your matches on the fly (info about multi-folder presence, if plugin is disabled, if it has no ui, and more).
 * **"Ungrouped" Folder:** Automatically catches any plugin that doesn't match your keywords so nothing gets lost (can be hidden).
 
 ### 2. ✏️ Aliases & Order
@@ -30,7 +30,8 @@ Created because I had too many plugins and got lost in the sidebar; feedback wel
 
 ### 3. 📝 Plugin Management & Notes
 * **Plugin Toggles:** Enable or disable your plugins directly from the group configuration menu.
-* **Custom Notes:** Add personal notes to any plugin (e.g., why you disabled it or what it does). Hover over the note icon to read it.
+* **Custom Notes:** Add personal notes to any plugin (e.g., why you disabled it or what it does). Hover over the note icon or the plugin in the sidebar to read it.
+* **Single-File Interoperability:** Keep your notes in sync with a standalone `.md` file for easy bulk editing. Supports custom paths, even inside hidden system folders like `.obsidian/plugins/Notes.md`.
 
 ### 4. 📉 Compact & Clean UI
 * **Compact Mode:** Hides the large "Core plugins" and "Community plugins" tabs. It moves them to small ⚙️ icons in the section headers to improve clarity.

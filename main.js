@@ -8,7 +8,9 @@ const DEFAULT_SETTINGS = {
     groups: [],
     collapsedSections: [],
     collapsedGroups: {},
-    pluginNotes: {} // Added storage for plugin notes
+    pluginNotes: {}, // Added storage for plugin notes
+    noteTimestamps: {}, // Tracks when each note was last edited
+    notesFilePath: ''
 };
 
 module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
@@ -33,15 +35,29 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             }
         });
 
-        this.app.workspace.onLayoutReady(() => {
+        this.app.workspace.onLayoutReady(async () => {
+            await this.loadNotesFromFile();
             this.restoreSectionStates();
             // Start a lightweight interval to check if the settings window is open.
             // If open -> attach Observer and stop checking.
             this.startSidebarWatcher();
         });
 
+        this.registerEvent(this.app.vault.on('modify', async (file) => {
+            if (this.settings.notesFilePath && file.path === this.settings.notesFilePath) {
+                if (this.isWritingNotes) return;
+                await this.loadNotesFromFile();
+            }
+        }));
+
         this.registerDomEvent(document, 'click', (evt) => {
             if (!document.querySelector('.modal-container')) return;
+
+            if (this.activeTooltip && this.activeTooltip.classList.contains('my-org-sidebar-note-tooltip')) {
+                this.activeTooltip.remove();
+                this.activeTooltip = null;
+            }
+
             // Kill active states on the proxies when user clicks a NATIVE sidebar item or our custom gear icons
             if (evt.isTrusted && evt.target instanceof Element) {
                 const clickedTab = evt.target.closest('.vertical-tab-nav-item');
@@ -92,6 +108,66 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 this.activeTooltip = null;
             }
         }, { capture: true });
+    }
+
+    hideCustomTooltip() {
+        if (this.activeTooltip) {
+            this.activeTooltip.remove();
+            this.activeTooltip = null;
+        }
+    }
+
+    addCustomTooltip(element, contentBuilder, options = {}) {
+        const position = options.position || 'top';
+        const extraClass = options.extraClass || '';
+        const offset = options.offset || 8;
+
+        element.addEventListener('mouseenter', () => {
+            this.hideCustomTooltip();
+
+            const tooltipEl = document.createElement('div');
+            tooltipEl.className = `my-org-custom-tooltip ${extraClass}`.trim();
+
+            if (typeof contentBuilder === 'string') {
+                tooltipEl.innerText = contentBuilder;
+            } else if (typeof contentBuilder === 'function') {
+                const content = contentBuilder();
+                if (!content && !options.alwaysShow) return;
+                if (typeof content === 'string') tooltipEl.innerText = content;
+                else if (content instanceof HTMLElement) tooltipEl.appendChild(content);
+            }
+
+            document.body.appendChild(tooltipEl);
+            this.activeTooltip = tooltipEl;
+
+            const rect = element.getBoundingClientRect();
+            const tipRect = tooltipEl.getBoundingClientRect();
+
+            let left, top;
+            if (position === 'top') {
+                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+                top = rect.top - tipRect.height - offset;
+            } else if (position === 'bottom') {
+                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+                top = rect.bottom + offset;
+            } else if (position === 'right') {
+                left = rect.right + offset;
+                top = rect.top;
+            }
+
+            if (left + tipRect.width > window.innerWidth) left = rect.left - tipRect.width - offset;
+            if (top + tipRect.height > window.innerHeight) top = window.innerHeight - tipRect.height - offset;
+            if (left < 0) left = offset;
+            if (top < 0) top = offset;
+
+            tooltipEl.style.left = `${left}px`;
+            tooltipEl.style.top = `${top}px`;
+        });
+
+        element.addEventListener('mouseleave', () => this.hideCustomTooltip());
+        if (options.hideOnClick !== false) {
+            element.addEventListener('click', () => this.hideCustomTooltip());
+        }
     }
 
     // Manages sidebar observation logic
@@ -154,6 +230,112 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             this.observing = true;
             this.observer.observe(sidebar, { childList: true, subtree: true });
             this.checkAndApply();
+        }
+    }
+
+    async loadNotesFromFile() {
+        if (!this.settings.notesFilePath || !this.settings.notesFilePath.endsWith('.md')) return;
+        try {
+            const filePath = this.settings.notesFilePath;
+            if (!(await this.app.vault.adapter.exists(filePath))) return;
+
+            const stat = await this.app.vault.adapter.stat(filePath);
+            const content = await this.app.vault.adapter.read(filePath);
+            const lines = content.split('\n');
+            let currentPluginId = null;
+            let currentNote = [];
+            const fileNotes = {};
+
+            const nameToId = {};
+            if (this.app.plugins && this.app.plugins.manifests) {
+                for (const id in this.app.plugins.manifests) {
+                    nameToId[this.app.plugins.manifests[id].name.toLowerCase()] = id;
+                }
+            }
+
+            for (const line of lines) {
+                if (line.startsWith('# ')) {
+                    if (currentPluginId && currentNote.length > 0) {
+                        fileNotes[currentPluginId] = currentNote.join('\n').trim();
+                    }
+                    const pluginName = line.substring(2).trim().toLowerCase();
+                    currentPluginId = nameToId[pluginName];
+                    currentNote = [];
+                } else if (currentPluginId) {
+                    currentNote.push(line);
+                }
+            }
+            if (currentPluginId && currentNote.length > 0) {
+                fileNotes[currentPluginId] = currentNote.join('\n').trim();
+            }
+
+            let modifiedMemory = false;
+            let needsFileWrite = false;
+            if (!this.settings.noteTimestamps) this.settings.noteTimestamps = {};
+
+            for (const id in fileNotes) {
+                const fileContent = fileNotes[id];
+                const memContent = this.settings.pluginNotes[id];
+                const memTime = this.settings.noteTimestamps[id] || 0;
+
+                if (!memContent || stat.mtime > memTime) {
+                    if (memContent !== fileContent) {
+                        this.settings.pluginNotes[id] = fileContent;
+                        this.settings.noteTimestamps[id] = stat.mtime;
+                        modifiedMemory = true;
+                    }
+                } else if (memContent !== fileContent && memTime > stat.mtime) {
+                    needsFileWrite = true;
+                }
+            }
+
+            for (const id in this.settings.pluginNotes) {
+                if (this.settings.pluginNotes[id] && !fileNotes[id]) {
+                    needsFileWrite = true;
+                }
+            }
+
+            if (modifiedMemory) {
+                await this.saveData(this.settings);
+            }
+            if (needsFileWrite) {
+                await this.saveNotesToFile();
+            }
+        } catch (e) {
+            console.error("Settings Sidebar Organizer: Failed to load notes from file", e);
+        }
+    }
+
+    async saveNotesToFile() {
+        if (!this.settings.notesFilePath || !this.settings.notesFilePath.endsWith('.md')) return;
+        try {
+            this.isWritingNotes = true;
+            let content = '';
+
+            if (this.app.plugins && this.app.plugins.manifests) {
+                for (const id in this.settings.pluginNotes) {
+                    const manifest = this.app.plugins.manifests[id];
+                    if (manifest && this.settings.pluginNotes[id]) {
+                        content += `# ${manifest.name}\n${this.settings.pluginNotes[id]}\n\n`;
+                    }
+                }
+            }
+
+            const filePath = this.settings.notesFilePath;
+            const pathParts = filePath.split('/');
+            let currentPath = '';
+            for (let i = 0; i < pathParts.length - 1; i++) {
+                currentPath += (currentPath ? '/' : '') + pathParts[i];
+                if (!(await this.app.vault.adapter.exists(currentPath))) {
+                    await this.app.vault.adapter.mkdir(currentPath);
+                }
+            }
+
+            await this.app.vault.adapter.write(filePath, content.trim());
+        } catch (e) {
+            console.error("Settings Sidebar Organizer: Failed to save notes to file", e);
+        } finally {
+            setTimeout(() => { this.isWritingNotes = false; }, 500);
         }
     }
 
@@ -275,6 +457,27 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         if (!this.app.plugins || !this.app.plugins.manifests) {
             this.isOrganizing = false;
             return;
+        }
+
+        // Detect newly installed plugins to automatically restore their synced notes
+        if (!this.knownInstalledPlugins) {
+            this.knownInstalledPlugins = new Set(Object.keys(this.app.plugins.manifests));
+        } else {
+            let newlyInstalled = false;
+            for (const id in this.app.plugins.manifests) {
+                if (!this.knownInstalledPlugins.has(id)) {
+                    this.knownInstalledPlugins.add(id);
+                    newlyInstalled = true;
+                }
+            }
+            for (const id of this.knownInstalledPlugins) {
+                if (!this.app.plugins.manifests[id]) {
+                    this.knownInstalledPlugins.delete(id);
+                }
+            }
+            if (newlyInstalled && this.settings.notesFilePath) {
+                this.loadNotesFromFile(); // Trigger async two-way sync
+            }
         }
 
         let targetContainer = document.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
@@ -427,6 +630,12 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         if (originalItem && originalItem.classList.contains('is-active')) {
             proxy.classList.add('is-active');
         }
+
+        this.addCustomTooltip(proxy, () => this.settings.pluginNotes[settingId], {
+            position: 'right',
+            extraClass: 'my-org-sidebar-note-tooltip',
+            offset: 10
+        });
 
         proxy.onclick = (e) => {
             e.stopPropagation();
@@ -731,7 +940,7 @@ class GroupConfigModal extends obsidian.Modal {
             const currentState = this.pendingStates[item.id];
 
             const toggleEl = ctrls.createDiv({ cls: 'my-org-plugin-toggle' });
-            new obsidian.ToggleComponent(toggleEl)
+            const toggleComp = new obsidian.ToggleComponent(toggleEl)
                 .setValue(currentState)
                 .onChange(val => {
                     this.pendingStates[item.id] = val;
@@ -744,11 +953,12 @@ class GroupConfigModal extends obsidian.Modal {
                     }
                 });
 
+            this.plugin.addCustomTooltip(toggleComp.toggleEl, "Enable/disable this plugin (NOT matching)", { position: 'top' });
+
             const nameCls = currentState ? 'my-org-modal-item-name' : 'my-org-modal-item-name is-disabled';
             row.createDiv({ cls: nameCls, text: item.name });
 
             if (isList1) {
-                row.createDiv({ cls: 'my-org-modal-arrow', text: '→' });
                 const input = row.createEl('input', { type: 'text', placeholder: 'Alias...' });
                 input.value = item.alias || '';
                 input.oninput = (e) => {
@@ -761,41 +971,15 @@ class GroupConfigModal extends obsidian.Modal {
             const noteBtn = row.createDiv({ cls: `my-org-modal-btn my-org-note-btn ${noteText ? 'has-note' : ''}` });
             obsidian.setIcon(noteBtn, 'file-text');
 
-            noteBtn.addEventListener('mouseenter', () => {
-                if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
-                const tooltipEl = document.createElement('div');
-                tooltipEl.className = 'my-org-custom-tooltip my-org-note-tooltip';
-
-                // Show text or a gentle instruction if empty
-                if (noteText) {
-                    tooltipEl.innerText = noteText;
-                } else {
-                    tooltipEl.innerText = "Write a note about this plugin...";
-                    tooltipEl.style.fontStyle = "italic";
-                    tooltipEl.style.opacity = "0.7";
-                }
-
-                document.body.appendChild(tooltipEl);
-                this.plugin.activeTooltip = tooltipEl;
-
-                const rect = noteBtn.getBoundingClientRect();
-                const ttRect = tooltipEl.getBoundingClientRect();
-                tooltipEl.style.left = `${rect.left + (rect.width / 2) - (ttRect.width / 2)}px`;
-                tooltipEl.style.top = `${rect.top - ttRect.height - 8}px`;
-            });
-
-            noteBtn.addEventListener('mouseleave', () => {
-                if (this.plugin.activeTooltip) {
-                    this.plugin.activeTooltip.remove();
-                    this.plugin.activeTooltip = null;
-                }
-            });
+            this.plugin.addCustomTooltip(noteBtn, () => {
+                const text = this.plugin.settings.pluginNotes[item.id];
+                if (text) return text;
+                fallback.className = 'my-org-note-fallback';
+                fallback.innerText = "Write a note about this plugin...";
+                return fallback;
+            }, { position: 'top', extraClass: 'my-org-note-tooltip', alwaysShow: true });
 
             noteBtn.onclick = () => {
-                if (this.plugin.activeTooltip) {
-                    this.plugin.activeTooltip.remove();
-                    this.plugin.activeTooltip = null;
-                }
                 new PluginNoteModal(this.app, item, this.plugin, () => {
                     this.renderList();
                 }).open();
@@ -806,31 +990,12 @@ class GroupConfigModal extends obsidian.Modal {
             const headerRow = this.listContainer.createDiv({ cls: 'my-org-toolbar-row' });
 
             const leftDiv = headerRow.createDiv({ cls: 'my-org-toolbar-left' });
-            const headerTitle = leftDiv.createDiv({ text: `Plugins with a settings menu (${this.items.length})` });
-            headerTitle.style.whiteSpace = 'nowrap';
+            leftDiv.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins with a settings menu (${this.items.length}):` });
 
             const resetBtn = leftDiv.createDiv({ cls: 'clickable-icon' });
             obsidian.setIcon(resetBtn, 'rotate-ccw');
 
-            resetBtn.addEventListener('mouseenter', () => {
-                if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
-                const tooltipEl = document.createElement('div');
-                tooltipEl.className = 'my-org-custom-tooltip';
-                tooltipEl.innerText = "Reset aliases and order";
-                document.body.appendChild(tooltipEl);
-                this.plugin.activeTooltip = tooltipEl;
-
-                const rect = resetBtn.getBoundingClientRect();
-                const tipRect = tooltipEl.getBoundingClientRect();
-                tooltipEl.style.left = rect.left + (rect.width / 2) - (tipRect.width / 2) + 'px';
-                tooltipEl.style.top = rect.bottom + 8 + 'px';
-            });
-            resetBtn.addEventListener('mouseleave', () => {
-                if (this.plugin.activeTooltip) {
-                    this.plugin.activeTooltip.remove();
-                    this.plugin.activeTooltip = null;
-                }
-            });
+            this.plugin.addCustomTooltip(resetBtn, "Reset aliases and order", { position: 'bottom' });
             resetBtn.onclick = () => {
                 this.items.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
                 this.items.forEach(i => i.alias = '');
@@ -868,8 +1033,7 @@ class GroupConfigModal extends obsidian.Modal {
             const list2HeaderRow = this.listContainer.createDiv({ cls: 'my-org-toolbar-row' });
 
             const leftDiv2 = list2HeaderRow.createDiv({ cls: 'my-org-toolbar-left' });
-            const headerTitle2 = leftDiv2.createDiv({ text: `Plugins without a settings menu (${this.list2.length})` });
-            headerTitle2.style.whiteSpace = 'nowrap';
+            leftDiv2.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins without a settings menu (${this.list2.length}):` });
 
             const rightDiv2 = list2HeaderRow.createDiv({ cls: 'my-org-toolbar-right' });
             rightDiv2.createDiv({ cls: 'my-org-notes-header', text: '' });
@@ -936,6 +1100,69 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     await this.plugin.saveSettings(true);
                 }));
 
+        let notesBtnEl = null;
+
+        new obsidian.Setting(containerEl)
+            .setName('Notes file path')
+            .setDesc('The .md file path where you can easily edit your plugin notes from one place via synchronization. If left empty or invalid, notes will only be saved internally.')
+            .addText(text => {
+                text.inputEl.classList.add('my-org-path-input');
+                text.setPlaceholder('e.g. ".obsidian/plugins/Notes.md"')
+                    .setValue(this.plugin.settings.notesFilePath)
+                    .onChange(async (value) => {
+                        this.plugin.settings.notesFilePath = value;
+                        await this.plugin.saveSettings();
+                        if (value && value.endsWith('.md')) {
+                            if (await this.app.vault.adapter.exists(value)) {
+                                if (notesBtnEl) notesBtnEl.classList.add('is-active');
+                                await this.plugin.loadNotesFromFile();
+                            } else {
+                                if (notesBtnEl) notesBtnEl.classList.remove('is-active');
+                                await this.plugin.saveNotesToFile();
+                                new obsidian.Notice('Created new sync file and exported existing notes.');
+                            }
+                        } else {
+                            if (notesBtnEl) notesBtnEl.classList.remove('is-active');
+                        }
+                    });
+            })
+            .addExtraButton(b => {
+                notesBtnEl = b.extraSettingsEl;
+                notesBtnEl.classList.add('my-org-sync-icon');
+                b.setIcon('file-text')
+                    .setTooltip('Open notes file')
+                    .onClick(async () => {
+                        if (!this.plugin.settings.notesFilePath) {
+                            new obsidian.Notice('Sync path is empty! File sync is disabled.');
+                            return;
+                        }
+                        const filePath = this.plugin.settings.notesFilePath;
+                        if (!(await this.app.vault.adapter.exists(filePath))) {
+                            new obsidian.Notice('File not found. Try saving a note first to create it.');
+                            return;
+                        }
+
+                        const file = this.app.vault.getAbstractFileByPath(filePath);
+                        if (file instanceof obsidian.TFile) {
+                            this.app.setting.close();
+                            this.app.workspace.getLeaf(false).openFile(file);
+                        } else {
+                            try {
+                                this.app.showInFolder(filePath);
+                            } catch (e) {
+                                new obsidian.Notice('Cannot open hidden files directly on this device.');
+                            }
+                        }
+                    });
+
+                (async () => {
+                    const filePath = this.plugin.settings.notesFilePath;
+                    if (filePath && filePath.endsWith('.md') && await this.app.vault.adapter.exists(filePath)) {
+                        notesBtnEl.classList.add('is-active');
+                    }
+                })();
+            });
+
         containerEl.createEl('hr');
         new obsidian.Setting(containerEl).setName('Grouped community plugins').setHeading();
 
@@ -1000,7 +1227,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 .setHeading();
 
             headerSetting.addExtraButton(b => {
-                b.setIcon('settings')
+                b.setIcon('pencil')
                     .setTooltip('Manage matched plugins')
                     .onClick(() => {
                         new GroupConfigModal(this.app, this.plugin, index).open();
@@ -1095,6 +1322,8 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
 
                 const tooltipEl = document.createElement('div');
                 tooltipEl.className = 'my-org-custom-tooltip';
+
+                tooltipEl.createDiv({ cls: 'my-org-modal-help-text', text: "Use commas to separate words or full phrases." });
 
                 if (tooltipData.length === 0) {
                     tooltipEl.createDiv({ cls: 'my-org-tt-line', text: 'No plugins match these keywords.' });
@@ -1304,15 +1533,30 @@ class PluginNoteModal extends obsidian.Modal {
         const cancelBtn = actions.createEl('button', { text: 'Cancel' });
         cancelBtn.onclick = () => this.close();
 
+        const manifest = this.app.plugins.manifests[this.pluginData.id];
+        if (manifest && manifest.description) {
+            const appendBtn = actions.createEl('button', { text: 'Append description' });
+            appendBtn.onclick = () => {
+                const currentVal = textArea.value.trim();
+                textArea.value = currentVal ? currentVal + '\n\n' + manifest.description : manifest.description;
+            };
+        }
+
         const saveBtn = actions.createEl('button', { text: 'Save note', cls: 'mod-cta' });
         saveBtn.onclick = async () => {
             const note = textArea.value.trim();
+            if (!this.pluginInstance.settings.noteTimestamps) {
+                this.pluginInstance.settings.noteTimestamps = {};
+            }
             if (note) {
                 this.pluginInstance.settings.pluginNotes[this.pluginData.id] = note;
+                this.pluginInstance.settings.noteTimestamps[this.pluginData.id] = Date.now();
             } else {
                 delete this.pluginInstance.settings.pluginNotes[this.pluginData.id]; // Cleanup if empty
+                delete this.pluginInstance.settings.noteTimestamps[this.pluginData.id];
             }
             await this.pluginInstance.saveSettings(false); // Save quietly
+            await this.pluginInstance.saveNotesToFile(); // Sync to file
             this.onSave(); // Trigger UI refresh in the list
             this.close();
         };

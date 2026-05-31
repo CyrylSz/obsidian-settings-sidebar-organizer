@@ -1,5 +1,19 @@
 # Changelog
 
+
+## 1.1.3 - Note Syncing & UI Refinements - 31-05-2026
+- **Sidebar Notes**: Hover over any plugin in the sidebar to view its note in a custom tooltip.
+- **Note Sync**: Notes are now fully synced with a markdown file without any lag. You can fully customize the path to this file (even supporting hidden folders like `.obsidian`), or leave the path empty/invalid to disable file syncing entirely. Internal memory is bulletproofed with true two-way sync timestamps to protect your notes from being overwritten by older files.
+> **Note:** The "Open notes file" button next to the "Notes file path" setting dynamically highlights in your accent color if the target file actually exists. If the path to your file is a hidden folder like `.obsidian`, then it will open in your OS's file explorer instead of a new tab in Obsidian.
+- **Persistent Note Memory**: `data.json` acts as a persistent memory cache that safely stores your notes even if you uninstall a plugin. The external `.md` file remains clean and only shows notes for currently installed plugins. If you reinstall a plugin later, the plugin will automatically pull your old note from memory and instantly restore it to your `.md` sync file!
+- **Append Description**: Added a convenient button in the note editor to pull and append the official plugin description from its manifest.
+- **Sync Reliability**: Fixed a rare edge case where reinstalling a previously uninstalled plugin wouldn't immediately restore its backed-up note to your external sync file.
+- **UI Polish**: 
+    - Decluttered the plugin manager list by removing unnecessary arrows and perfectly aligned the sort combobox for a cleaner look.
+    - Replaced the manage plugins gear icon with a pencil, and refined the modal background colors to a pleasing dark-to-light progression.
+    - Added a helpful tip to the match counter badge tooltip explaining that keywords and full phrases can be separated by commas.
+    - Added a quick tooltip to the plugin toggles in the group modal to clarify they enable/disable the actual plugin.
+
 ## 1.1.2 - Toggles, Notes, and Massive QoL Improvements - 29-05-2026
 - **Plugin Toggles:** You can now enable and disable plugins directly from the group configuration window! Changes apply smoothly only after you click "Save changes", so your sidebar doesn't flash annoyingly.
 - **Plugin Notes:** Added the ability to write custom notes for any plugin. Just hover over the new note icon to read them! (Reddit @Responsible-Slide-26 feedback)
