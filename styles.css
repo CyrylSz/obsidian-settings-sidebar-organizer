@@ -1,8 +1,6 @@
-/* ==========================================================
-   SETTINGS SIDEBAR ORGANIZER - CUSTOMIZATION STYLES
+/* --- Settings Sidebar Organizer: Customization Styles ---
    Use CSS Snippets to override these styles if you want 
-   to change the look of your plugin folders and items.
-   ========================================================== */
+   to change the look of your plugin folders and items. */
 
 /* Utility classes used to hide elements */
 div.vertical-tab-nav-item.my-org-hidden,
@@ -14,6 +12,12 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 .my-org-modal-actions button:disabled {
     opacity: 0.5;
     pointer-events: none;
+}
+
+/* Counter for groups and plugins */
+.my-org-counter {
+    color: var(--text-muted);
+    font-weight: normal;
 }
 
 /* --- BUTTON CONTAINER STYLE --- */
@@ -46,6 +50,16 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     z-index: 10;
 }
 
+/* Expand clickable hit area without changing visual size */
+.my-org-section-btn::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    left: -46px;
+    right: -32px;
+}
+
 /* Hover effect for section gear icons */
 .my-org-section-btn:hover {
     opacity: 1;
@@ -58,21 +72,43 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     right: 35px;
 }
 
-/* ==========================================================
-   SIDEBAR FOLDERS (GROUPS) 
-   ========================================================== */
+/* Ensures setting items fit properly */
+.my-org-folder-items .setting-item {
+    padding-left: 25px;
+}
+
+/* --- Sidebar Search Bar --- */
+
+.my-org-search-container {
+    width: 100%;
+    margin-bottom: 10px;
+    margin-top: 5px;
+}
+
+.my-org-search-input {
+    width: 100%;
+    background-color: var(--background-modifier-form-field);
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+.my-org-search-input:focus {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+/* --- Sidebar Folders (Groups) --- */
 
 /* The main container for your custom folders in the sidebar */
 .my-org-folder {
     border-top: 1px solid var(--background-modifier-border);
-    width: 100%;
-    margin-top: -1px;
 }
 
 /* Specific styling for the "Ungrouped" folder */
 .my-org-folder.my-org-special {
     border-top: 1px solid var(--interactive-accent);
-    margin-top: 5px;
 }
 
 /* The clickable header/title of your custom folders in the sidebar */
@@ -121,37 +157,26 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     display: none;
 }
 
-/* ==========================================================
-   SIDEBAR ITEMS (PLUGINS INSIDE FOLDERS)
-   ========================================================== */
+/* --- Sidebar Items (Plugins inside folders) --- */
 
 /* The individual plugin items inside your custom folders */
 .my-org-proxy {
     padding: 6px 12px 6px 32px;
     /* Left padding creates the indent inside the folder */
-    cursor: pointer;
+    cursor: default;
     color: var(--text-muted);
     font-size: 13px;
     border-radius: 4px;
     display: block;
 }
 
-/* Hover effect for plugin items */
-.my-org-proxy:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
-}
-
-/* Styling for the currently selected/active plugin in the sidebar */
+/* Ensure text brightness matches native tabs on hover/active */
+.my-org-proxy:hover,
 .my-org-proxy.is-active {
-    background-color: var(--background-modifier-active-hover);
     color: var(--text-normal);
-    font-weight: bold;
 }
 
-/* ==========================================================
-   COLLAPSIBLE SIDEBAR HEADERS (NATIVE SECTIONS)
-   ========================================================== */
+/* --- Collapsible Sidebar Headers (Native sections) --- */
 
 /* Base styling for main native headers (e.g., "Core plugins") */
 .vertical-tab-header-group-title {
@@ -200,9 +225,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     display: none;
 }
 
-/* ==========================================================
-   POPUP MODAL MENU (MANAGE ITEMS)
-   ========================================================== */
+/* --- Popup Modal Menu (Manage items) --- */
 
 /* The scrollable list inside the "Manage items" popup */
 .my-org-modal-list {
@@ -279,17 +302,20 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 }
 
 /* State when a row is being dragged */
-.my-org-modal-item.is-dragging {
+.my-org-modal-item.is-dragging,
+.my-org-group-card.is-dragging {
     opacity: 0.4;
     background-color: var(--background-modifier-active-hover);
 }
 
 /* Drop indicators (blue lines) */
-.my-org-modal-item.drop-target-above {
+.my-org-modal-item.drop-target-above,
+.my-org-group-card.drop-target-above {
     box-shadow: 0 -2px 0 var(--interactive-accent);
 }
 
-.my-org-modal-item.drop-target-below {
+.my-org-modal-item.drop-target-below,
+.my-org-group-card.drop-target-below {
     box-shadow: 0 2px 0 var(--interactive-accent);
 }
 
@@ -303,6 +329,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 .my-org-modal-actions {
     display: flex;
     justify-content: center;
+    gap: 10px;
     margin-top: 0px;
     padding-top: 5px;
     padding-bottom: 5px;
@@ -319,9 +346,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     font-style: italic;
 }
 
-/* ==========================================================
-   PLUGIN SETTINGS MENU (MAIN TAB)
-   ========================================================== */
+/* --- Plugin Settings Menu (Main tab) --- */
 
 /* The visual box surrounding each of your configured groups in settings */
 .my-org-group-card {
@@ -331,14 +356,26 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     border-radius: 5px;
 }
 
+/* Ensure consistent spacing for all group headings */
+body .my-org-group-card>.setting-item.setting-item-heading {
+    margin-top: 8px;
+    padding-top: 0;
+    border-top: none;
+}
+
 /* The "+ Add group" button width */
 .my-org-add-group-btn {
     width: 200px;
+    height: 36px;
+    font-size: 15px;
 }
 
-/* ==========================================================
-   MODAL & HOVER TOOLTIPS
-   ========================================================== */
+/* Larger plus button next to keywords */
+.my-org-large-add-btn {
+    transform: scale(1.15);
+}
+
+/* --- Modal & Hover Tooltips --- */
 
 /* Layout for the modal header with description and sort dropdown */
 .my-org-modal-header-row {
@@ -361,8 +398,14 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     /* 1px(border) = perfect edge alignment with input boxes below */
 }
 
+.my-org-global-sort-container {
+    display: flex;
+    align-items: center;
+}
+
 .my-org-sort-select {
     margin-right: 0;
+    width: auto;
 }
 
 /* Larger Keywords Box */
@@ -393,9 +436,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     background-color: var(--background-modifier-hover);
 }
 
-/* ==========================================================
-   CUSTOM FLOATING TOOLTIP ENGINE
-   ========================================================== */
+/* --- Custom Floating Tooltip Engine --- */
 
 /* Fixed layer configuration to decouple layout from scrolling containers */
 .my-org-custom-tooltip {
@@ -418,11 +459,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     line-height: 1.4;
 }
 
-/* Specific highlighting rule for active duplications */
-.my-org-tt-name.is-overlap {
-    font-weight: bold;
-    color: var(--text-accent);
-}
+
 
 /* Secondary meta tracking for background groups list */
 .my-org-tt-others {
@@ -432,7 +469,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 }
 
 /* Main plugin identifier color (e.g. Enhancing Export) */
-.my-org-tt-identifier {
+.my-org-tt-name {
     color: var(--text-accent);
     font-weight: 500;
 }
@@ -453,9 +490,7 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     pointer-events: none;
 }
 
-/* ==========================================================
-   NOTES, TOOLTIPS & LIST MODIFICATIONS
-   ========================================================== */
+/* --- Notes, Tooltips & List Modifications --- */
 
 /* Styling for tooltip rows associated with disabled plugins */
 .my-org-tt-line.is-disabled {
@@ -504,6 +539,8 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 .my-org-note-tooltip {
     max-width: 300px;
     white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
     text-align: center;
 }
 
@@ -511,6 +548,8 @@ div.vertical-tab-nav-item.my-org-hide-nav {
 .my-org-sidebar-note-tooltip {
     max-width: 250px;
     white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
     text-align: left;
     pointer-events: none;
 }
@@ -523,20 +562,18 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     margin-top: 10px;
 }
 
-/* ==========================================================
-   UI POLISH & TOOLBAR ALIGNMENT
-   ========================================================== */
+/* --- UI Polish & Toolbar Alignment --- */
 
-/* Widen modal for long names but keep it reasonable */
+/* Widens modal for long names but keeps it reasonable */
 .modal.my-org-wide-modal {
     width: 700px;
     max-width: 95vw;
 }
 
-/* Push switch away from drag handle, keep it close to the plugin name */
+/* Pushes switch away from drag handle, keeping it close to the plugin name */
 .my-org-plugin-toggle {
     margin-left: 15px;
-    margin-right: 5px;
+    margin-right: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -544,14 +581,39 @@ div.vertical-tab-nav-item.my-org-hide-nav {
     position: relative;
 }
 
-/* Force strict bounding box so the native toggle doesn't bleed over the text */
+/* Styling for the manual exclude eye icon */
+.my-org-exclude-icon {
+    padding: 2px 4px;
+    margin-right: 0;
+    opacity: 1;
+    color: var(--text-normal);
+    transition: opacity 0.2s ease, color 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+.my-org-exclude-icon:hover {
+    opacity: 1;
+    color: var(--text-normal);
+}
+
+.my-org-exclude-icon.is-hidden {
+    opacity: 0.4;
+    color: var(--text-muted);
+}
+
+.my-org-modal-item-name.is-hidden {
+    opacity: 0.5;
+}
+
+/* Forces strict bounding box so the native toggle doesn\'t bleed over the text */
 body .my-org-plugin-toggle .checkbox-container {
     margin: 0;
     flex-shrink: 0;
     position: relative;
 }
 
-/* Ensure the invisible, absolutely positioned input never escapes the switch bounds */
+/* Ensures the invisible, absolutely positioned input never escapes the switch bounds */
 body .my-org-plugin-toggle .checkbox-container input[type="checkbox"] {
     position: absolute;
     top: 0;
@@ -564,7 +626,7 @@ body .my-org-plugin-toggle .checkbox-container input[type="checkbox"] {
     cursor: pointer;
 }
 
-/* Center save button at the very bottom */
+/* Centers save button at the very bottom */
 .my-org-modal-actions.my-org-actions-centered {
     justify-content: center;
     margin-top: 15px;
@@ -649,6 +711,10 @@ body .my-org-plugin-toggle .checkbox-container input[type="checkbox"] {
     opacity: 1;
 }
 
+.my-org-sync-icon.is-active:hover {
+    background-color: var(--background-modifier-hover);
+}
+
 .my-org-note-fallback {
     font-style: italic;
     opacity: 0.7;
@@ -681,4 +747,109 @@ body .my-org-plugin-toggle .checkbox-container input[type="checkbox"] {
     border: 0;
     border-top: 1px solid var(--background-modifier-border);
     margin: 15px 0 10px 0;
+}
+
+.my-org-tt-help-1 {
+    margin-bottom: 2px;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.my-org-bold {
+    font-weight: bold;
+}
+
+
+.my-org-tt-spacing {
+    margin-top: 10px;
+}
+
+/* Bulk Append Modal */
+.my-org-bulk-modal .my-org-modal-title {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.my-org-bulk-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: var(--background-primary-alt);
+}
+
+.my-org-bulk-item {
+    margin-bottom: 6px;
+}
+
+.my-org-bulk-item:last-child {
+    margin-bottom: 0;
+}
+
+.my-org-bulk-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.my-org-bulk-label input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.my-org-bulk-name {
+    font-size: 0.95em;
+    color: var(--text-normal);
+}
+
+.my-org-bulk-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* Add Plugin Modal item layout */
+.my-org-add-plugin-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+}
+
+.my-org-add-plugin-name {
+    color: var(--text-normal);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.my-org-add-plugin-separator {
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+/* Bulk Append Modal: master "Select all" row */
+.my-org-bulk-item-master {
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+}
+
+.my-org-bulk-select-all {
+    font-weight: bold;
+}
+
+/* Section header rows inside the bulk modal list */
+.my-org-bulk-section-header {
+    padding: 0;
+    margin-top: 12px;
+    margin-bottom: 8px;
+}
+
+/* Empty state message in the bulk modal */
+.my-org-bulk-empty {
+    padding: 10px;
 }

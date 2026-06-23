@@ -8,9 +8,14 @@ const DEFAULT_SETTINGS = {
     groups: [],
     collapsedSections: [],
     collapsedGroups: {},
-    pluginNotes: {}, // Added storage for plugin notes
-    noteTimestamps: {}, // Tracks when each note was last edited
-    notesFilePath: ''
+    collapsedSettingGroups: {},
+    pluginNotes: {},
+    noteTimestamps: {},
+    notesFilePath: '',
+    sidebarTooltipPosition: 'left',
+    autoAppendDesc: false,
+    knownPluginTabs: {},
+    showSearchBar: true
 };
 
 module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
@@ -18,15 +23,12 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         await this.loadSettings();
         this.addSettingTab(new OrganizerSettingTab(this.app, this));
 
-        // Apply dynamic body class for collapsible headers CSS
+        // Applies dynamic body class for collapsible headers CSS
         document.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
 
-        // Flag to prevent infinite loops (Observer -> DOM change -> Observer)
         this.isOrganizing = false;
-        // Flag indicating if the observer is currently attached
         this.observing = false;
 
-        // It reacts only to actual DOM changes (node additions/removals).
         this.observer = new MutationObserver((mutations) => {
             if (this.isOrganizing) return;
             const hasNodeChanges = mutations.some(m => m.type === 'childList');
@@ -38,8 +40,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         this.app.workspace.onLayoutReady(async () => {
             await this.loadNotesFromFile();
             this.restoreSectionStates();
-            // Start a lightweight interval to check if the settings window is open.
-            // If open -> attach Observer and stop checking.
+            // Starts a lightweight interval to check if the settings window is open, attaching the observer once opened
             this.startSidebarWatcher();
         });
 
@@ -58,7 +59,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 this.activeTooltip = null;
             }
 
-            // Kill active states on the proxies when user clicks a NATIVE sidebar item or our custom gear icons
+            // Removes active states on the proxies when user clicks a native sidebar item or custom gear icons
             if (evt.isTrusted && evt.target instanceof Element) {
                 const clickedTab = evt.target.closest('.vertical-tab-nav-item');
                 const clickedGear = evt.target.closest('.my-org-section-btn');
@@ -67,9 +68,9 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 }
             }
 
-            // Catches the global click and waits for Obsidian to finish rebuilding the Document Object Model
+            // Catches the global click and waits for Obsidian to finish rebuilding the DOM
             if (evt.target instanceof Element && (evt.target.closest('.checkbox-container') || evt.target.closest('button'))) {
-                if (evt.target.closest('.my-org-wide-modal')) return; // Ignore clicks inside our custom modal to prevent sidebar flickering
+                if (evt.target.closest('.my-org-wide-modal')) return; // Ignores clicks inside the custom modal to prevent sidebar flickering
                 if (this.clickTimer) clearTimeout(this.clickTimer);
                 this.clickTimer = setTimeout(() => this.checkAndApply(), 150);
             }
@@ -83,7 +84,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 const itemsContainer = group.querySelector('.vertical-tab-header-group-items');
 
                 if (itemsContainer) {
-                    // LANGUAGE INDEPENDENCE: We use the built-in data-section
+                    // Uses the built-in data-section for language independence
                     const sectionId = itemsContainer.getAttribute('data-section') || header.innerText.trim();
 
                     const isCollapsed = itemsContainer.classList.toggle('is-collapsed');
@@ -100,7 +101,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             }
         });
 
-        // Listen to all scroll actions in the capture phase to clear floating tooltips
+        // Listens to all scroll actions in the capture phase to clear floating tooltips
         this.registerDomEvent(window, 'scroll', (evt) => {
             if (!document.querySelector('.modal-container')) return;
             if (this.activeTooltip) {
@@ -118,11 +119,11 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     }
 
     addCustomTooltip(element, contentBuilder, options = {}) {
-        const position = options.position || 'top';
         const extraClass = options.extraClass || '';
         const offset = options.offset || 8;
 
         element.addEventListener('mouseenter', () => {
+            const position = (typeof options.position === 'function') ? options.position() : (options.position || 'top');
             this.hideCustomTooltip();
 
             const tooltipEl = document.createElement('div');
@@ -152,7 +153,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 top = rect.bottom + offset;
             } else if (position === 'right') {
                 left = rect.right + offset;
-                top = rect.top;
+                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
+            } else if (position === 'left') {
+                left = rect.left - tipRect.width - offset;
+                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
             }
 
             if (left + tipRect.width > window.innerWidth) left = rect.left - tipRect.width - offset;
@@ -172,23 +176,23 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
     // Manages sidebar observation logic
     startSidebarWatcher() {
-        // Replace the slow setInterval with an instant MutationObserver on the application body
+        // Uses an instant MutationObserver on the application body to detect DOM changes
         this.bodyObserver = new MutationObserver((mutations) => {
             mutations.forEach(mutation => {
 
-                // 1. Detect when the Settings window is opened (added to the Document Object Model)
+                // Detects when the Settings window is opened (added to the Document Object Model)
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1 && node.classList.contains('modal-container')) {
-                        const sidebar = node.querySelector('.vertical-tab-header-group-items');
+                        const sidebar = node.querySelector('.vertical-tab-header');
                         if (sidebar && !this.observing) {
                             this.observing = true;
                             this.observer.observe(sidebar, { childList: true, subtree: true });
-                            this.checkAndApply(); // Apply instantly before the screen paints
+                            this.checkAndApply(); // Applies instantly before the screen paints
                         }
                     }
                 });
 
-                // 2. Detect when the Settings window is closed (removed from the Document Object Model)
+                // Detects when the Settings window is closed (removed from the Document Object Model)
                 mutation.removedNodes.forEach(node => {
                     if (node.nodeType === 1 && node.classList.contains('modal-container')) {
 
@@ -203,14 +207,13 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                                 this.observing = false;
                             }
 
-                            // INSTANT COLLAPSE LOGIC
+                            // Collapses groups when the settings modal closes
                             if (this.settings.startCollapsed) {
                                 this.settings.collapsedGroups = {};
                                 this.saveSettings(false);
 
-                                // Obsidian caches the closed modal in memory.
-                                // We must strip the 'open' state from the detached HTML right now, 
-                                // so there is no visual flash when the user reopens the settings!
+                                // Strips the 'open' state from the detached HTML to prevent visual flashes
+                                // when the user reopens the settings modal because Obsidian caches it in memory.
                                 node.querySelectorAll('.my-org-folder').forEach(folder => {
                                     folder.removeAttribute('open');
                                 });
@@ -221,16 +224,22 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             });
         });
 
-        // Start observing the main application body for the settings modal
+        // Starts observing the main application body for the settings modal
         this.bodyObserver.observe(document.body, { childList: true });
 
-        // Initial fallback check in case settings are already open when plugin loads
-        const sidebar = document.querySelector('.vertical-tab-header-group-items');
+        // Performs initial fallback check in case settings are already open when plugin loads
+        const sidebar = document.querySelector('.vertical-tab-header');
         if (sidebar && !this.observing) {
             this.observing = true;
             this.observer.observe(sidebar, { childList: true, subtree: true });
             this.checkAndApply();
         }
+    }
+
+    getCleanNote(id) {
+        const raw = this.settings.pluginNotes[id];
+        if (!raw) return '';
+        return raw.replace(/<!--[\s\S]*?-->/g, '').trim();
     }
 
     async loadNotesFromFile() {
@@ -342,20 +351,20 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     onunload() {
         if (this.observer) this.observer.disconnect();
         if (this.bodyObserver) this.bodyObserver.disconnect();
-        if (this.clickTimer) clearTimeout(this.clickTimer); // Clear pending timers
+        if (this.clickTimer) clearTimeout(this.clickTimer); // Clears pending timers
 
         document.body.classList.remove('my-org-collapse-enabled');
 
         document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
         document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
 
-        // Target ONLY settings modal headers to prevent breaking Obsidian's native file explorer!
+        // Targets only settings modal headers to prevent breaking Obsidian\'s native file explorer
         document.querySelectorAll('.vertical-tab-header-group-title.is-collapsed, .vertical-tab-header-group-items.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
 
         document.querySelectorAll('.my-org-hide-nav').forEach(el => el.classList.remove('my-org-hide-nav'));
         document.querySelectorAll('.my-org-section-btn').forEach(btn => btn.remove());
 
-        // Clean up floating tooltips
+        // Cleans up floating tooltips
         document.querySelectorAll('.my-org-custom-tooltip').forEach(t => t.remove());
     }
 
@@ -379,7 +388,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             const group = header.parentElement;
             const items = group.querySelector('.vertical-tab-header-group-items');
             if (items) {
-                // Read the safe section ID
+                // Reads the safe section ID
                 const sectionId = items.getAttribute('data-section') || header.innerText.trim();
                 if (this.settings.collapsedSections.includes(sectionId)) {
                     header.classList.add('is-collapsed');
@@ -391,7 +400,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
     manageCompactMode() {
         if (this.settings.compactMode) {
-            // Search by immutable setting IDs (language independent)
+            // Searches by immutable setting IDs (language independent)
             const coreNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="plugins"]');
             const commNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="community-plugins"]');
             const targetNavItems = [coreNav, commNav].filter(Boolean);
@@ -419,10 +428,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                     e.stopPropagation();
                     e.preventDefault();
 
-                    // Manually clear proxy active states because stopPropagation blocks the global listener
+                    // Manually clears proxy active states because stopPropagation blocks the global listener
                     document.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
 
-                    // Connect the gear icon with the hidden menu button
+                    // Connects the gear icon with the hidden menu button
                     if (header === (coreSection && coreSection.previousElementSibling) && coreNav) {
                         coreNav.click();
                     } else if (header === (commSection && commSection.previousElementSibling) && commNav) {
@@ -441,7 +450,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         const sidebar = document.querySelector('.vertical-tab-header-group-items');
         if (!sidebar) return;
 
-        // Restore collapse if needed
+        // Restores collapse if needed
         if (this.settings.collapsibleHeaders) {
             this.restoreSectionStates();
         }
@@ -451,7 +460,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     }
 
     organizeSidebar() {
-        // Set flag to indicate internal DOM modification so the Observer ignores us
+        // Sets flag to indicate internal DOM modification so the Observer ignores changes
         this.isOrganizing = true;
 
         if (!this.app.plugins || !this.app.plugins.manifests) {
@@ -459,14 +468,16 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             return;
         }
 
-        // Detect newly installed plugins to automatically restore their synced notes
+        // Detects newly installed plugins to automatically restore their synced notes
         if (!this.knownInstalledPlugins) {
             this.knownInstalledPlugins = new Set(Object.keys(this.app.plugins.manifests));
         } else {
             let newlyInstalled = false;
+            const newlyFoundIds = [];
             for (const id in this.app.plugins.manifests) {
                 if (!this.knownInstalledPlugins.has(id)) {
                     this.knownInstalledPlugins.add(id);
+                    newlyFoundIds.push(id);
                     newlyInstalled = true;
                 }
             }
@@ -476,7 +487,25 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 }
             }
             if (newlyInstalled && this.settings.notesFilePath) {
-                this.loadNotesFromFile(); // Trigger async two-way sync
+                this.loadNotesFromFile(); // Triggers async two-way sync
+            }
+            // Auto-appends official descriptions for newly installed plugins when the feature is enabled
+            if (newlyInstalled && this.settings.autoAppendDesc && newlyFoundIds.length > 0) {
+                let added = false;
+                for (const id of newlyFoundIds) {
+                    const manifest = this.app.plugins.manifests[id];
+                    if (!manifest || !manifest.description) continue;
+                    const currentNote = this.settings.pluginNotes[id] || '';
+                    if (!currentNote.includes(manifest.description)) {
+                        this.settings.pluginNotes[id] = currentNote ? currentNote + '\n\n' + manifest.description : manifest.description;
+                        if (!this.settings.noteTimestamps) this.settings.noteTimestamps = {};
+                        this.settings.noteTimestamps[id] = Date.now();
+                        added = true;
+                    }
+                }
+                if (added) {
+                    this.saveSettings(false).then(() => this.saveNotesToFile());
+                }
             }
         }
 
@@ -494,25 +523,25 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             return;
         }
 
-        // Clean up
         targetContainer.querySelectorAll('.my-org-folder').forEach(el => el.remove());
         targetContainer.querySelectorAll('.my-org-hidden').forEach(el => el.classList.remove('my-org-hidden'));
+        targetContainer.querySelectorAll('.my-org-search-container').forEach(el => el.remove());
 
         const pluginItems = Array.from(targetContainer.querySelectorAll('.vertical-tab-nav-item'));
 
-        // Prepare Groups
-        const groupsMap = this.settings.groups.map(g => {
+        const groupsMap = this.settings.groups.map((g, idx) => {
             const details = document.createElement('details');
             details.className = 'my-org-folder';
-            const savedState = this.settings.collapsedGroups[g.title];
+            const savedState = this.settings.collapsedGroups[idx];
             const isOpen = savedState !== undefined ? savedState : !this.settings.startCollapsed;
             details.open = isOpen;
 
-            // Creating element safely
+            // Creates element safely
             details.createEl('summary', { cls: 'my-org-summary', text: g.title });
 
             details.addEventListener('toggle', () => {
-                this.settings.collapsedGroups[g.title] = details.open;
+                if (this.currentSearchQuery) return;
+                this.settings.collapsedGroups[idx] = details.open;
                 this.saveSettings(false);
             });
             return {
@@ -529,6 +558,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         const savedUngroupedState = this.settings.collapsedGroups['Ungrouped'];
         ungroupedDetails.open = savedUngroupedState !== undefined ? savedUngroupedState : !this.settings.startCollapsed;
         ungroupedDetails.addEventListener('toggle', () => {
+            if (this.currentSearchQuery) return;
             this.settings.collapsedGroups['Ungrouped'] = ungroupedDetails.open;
             this.saveSettings(false);
         });
@@ -540,42 +570,101 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         let ungroupedCount = 0;
         let foldersInserted = false;
 
+        let executeSearch = null;
+
+        const insertFolders = (referenceNode) => {
+            if (foldersInserted) return;
+            if (this.settings.showSearchBar) {
+                const searchContainer = document.createElement('div');
+                searchContainer.className = 'my-org-search-container';
+                const searchInput = document.createElement('input');
+                searchInput.type = 'search';
+                searchInput.placeholder = 'Search...';
+                searchInput.className = 'my-org-search-input';
+                searchInput.value = this.currentSearchQuery || '';
+
+                const applySearch = () => {
+                    const query = searchInput.value.toLowerCase().trim();
+                    this.currentSearchQuery = query;
+                    const detailsEls = targetContainer.querySelectorAll('details.my-org-folder');
+
+                    detailsEls.forEach(details => {
+                        let hasVisible = false;
+                        const items = details.querySelectorAll('.my-org-proxy');
+                        items.forEach(item => {
+                            const text = item.textContent.toLowerCase();
+                            if (text.includes(query)) {
+                                item.style.display = '';
+                                hasVisible = true;
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+
+                        if (query !== '') {
+                            details.style.display = hasVisible ? '' : 'none';
+                            if (hasVisible) details.open = true;
+                        } else {
+                            details.style.display = '';
+                            const isUngrouped = details.classList.contains('my-org-special');
+                            let savedState = true;
+                            if (isUngrouped) {
+                                savedState = this.settings.collapsedGroups['Ungrouped'];
+                            } else {
+                                const summaryText = details.querySelector('summary')?.textContent;
+                                const idx = this.settings.groups.findIndex(g => g.title === summaryText);
+                                if (idx !== -1) savedState = this.settings.collapsedGroups[idx];
+                            }
+                            details.open = savedState !== undefined ? savedState : !this.settings.startCollapsed;
+                        }
+                    });
+                };
+
+                executeSearch = applySearch;
+                searchInput.addEventListener('input', applySearch);
+                searchContainer.appendChild(searchInput);
+                targetContainer.insertBefore(searchContainer, referenceNode);
+            }
+            groupsMap.forEach(g => targetContainer.insertBefore(g.element, referenceNode));
+            if (this.settings.showUngrouped) targetContainer.insertBefore(ungroupedDetails, referenceNode);
+            foldersInserted = true;
+        };
+
         pluginItems.forEach(item => {
             const uiName = item.innerText.trim();
             const settingId = item.getAttribute('data-setting-id');
             const manifest = settingId ? this.app.plugins.manifests[settingId] : null;
 
-            // Ensure it's a valid community plugin
+            // Ensures it\'s a valid community plugin
             if (!manifest) return;
             const manifestName = manifest.name;
 
             if (item.classList.contains('my-org-hidden')) return;
 
-            if (!foldersInserted) {
-                groupsMap.forEach(g => targetContainer.insertBefore(g.element, item));
-                if (this.settings.showUngrouped) targetContainer.insertBefore(ungroupedDetails, item);
-                foldersInserted = true;
-            }
+            insertFolders(item);
 
             let matchedCount = 0;
             for (const group of groupsMap) {
-                // Match against the official manifest name to ensure consistency with the settings modal
-                if (group.keywords.some(k => manifestName.toLowerCase().includes(k) || uiName.toLowerCase().includes(k))) {
+                // Claims the plugin for the group even if it's manually hidden via the eye icon
+                if (this.isPluginMatchedByGroup(settingId, manifest, uiName, group.data, true)) {
+                    matchedCount++; // Prevents it from falling into the Ungrouped section
 
-                    // Look up configuration using the official manifest name
-                    const config = group.items.find(i => i.name === manifestName);
+                    // Checks if it should be rendered in the sidebar (not manually hidden)
+                    if (this.isPluginMatchedByGroup(settingId, manifest, uiName, group.data, false)) {
+                        // Looks up configuration using the official manifest name
+                        const config = group.items.find(i => i.name === manifestName);
 
-                    // Fallback to the User Interface name if no alias is set
-                    const displayName = (config && config.alias) ? config.alias : uiName;
+                        // Falls back to the user interface name if no alias is set
+                        const globalAlias = this.getGlobalAlias(settingId);
+                        const displayName = (config && config.alias) ? config.alias : (globalAlias || uiName);
 
-                    // Pass the settingId instead of text for 100% reliable clicking
-                    const proxy = this.createProxy(displayName, settingId, item, targetContainer);
-                    group.element.appendChild(proxy);
+                        // Passes the settingId instead of text for reliable clicking
+                        const proxy = this.createProxy(displayName, settingId, item, targetContainer);
+                        group.element.appendChild(proxy);
 
-                    // Push manifestName so manual sorting arrays match perfectly
-                    group.proxies.push({ name: manifestName, element: proxy });
-
-                    matchedCount++;
+                        // Pushes manifestName so manual sorting arrays match perfectly
+                        group.proxies.push({ name: manifestName, element: proxy });
+                    }
                 }
             }
 
@@ -583,7 +672,8 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 item.classList.add('my-org-hidden');
             } else {
                 if (this.settings.showUngrouped) {
-                    const proxy = this.createProxy(uiName, settingId, item, targetContainer);
+                    const globalAlias = this.getGlobalAlias(settingId);
+                    const proxy = this.createProxy(globalAlias || uiName, settingId, item, targetContainer);
                     ungroupedDetails.appendChild(proxy);
                     ungroupedCount++;
                     item.classList.add('my-org-hidden');
@@ -592,6 +682,14 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 }
             }
         });
+
+        if (this.settings.showUngrouped && ungroupedCount === 0) {
+            ungroupedDetails.style.display = 'none';
+        }
+
+        if (!foldersInserted) {
+            insertFolders(null);
+        }
 
         groupsMap.forEach(group => {
             if (group.proxies.length === 0) {
@@ -615,24 +713,47 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             else ungroupedDetails.remove();
         }
 
-        // Reset flag instantly after operation completes and clear pending observer queue
+        if (executeSearch && this.currentSearchQuery) {
+            executeSearch();
+        }
+
+        // Resets flag instantly after operation completes and clears pending observer queue
         if (this.observer) this.observer.takeRecords();
         this.isOrganizing = false;
     }
 
+    getGlobalAlias(settingId) {
+        let globalAlias = '';
+        if (this.settings.groups) {
+            for (const group of this.settings.groups) {
+                if (group.items) {
+                    const found = group.items.find(i => i.id === settingId);
+                    if (found && found.alias) {
+                        globalAlias = found.alias;
+                        break;
+                    }
+                }
+            }
+        }
+        return globalAlias;
+    }
+
     createProxy(displayName, settingId, originalItem, container) {
         const proxy = document.createElement('div');
-        proxy.className = 'my-org-proxy';
+        proxy.className = 'vertical-tab-nav-item my-org-proxy';
         proxy.innerText = displayName;
         proxy.setAttribute('data-setting-id', settingId);
 
-        // Check if originalItem is still in the Document Object Model and active for initial styling
+        // Checks if originalItem is still in the Document Object Model and active for initial styling
         if (originalItem && originalItem.classList.contains('is-active')) {
             proxy.classList.add('is-active');
         }
 
-        this.addCustomTooltip(proxy, () => this.settings.pluginNotes[settingId], {
-            position: 'right',
+        this.addCustomTooltip(proxy, () => {
+            if (this.settings.sidebarTooltipPosition === 'hidden') return null;
+            return this.getCleanNote(settingId);
+        }, {
+            position: () => this.settings.sidebarTooltipPosition || 'left',
             extraClass: 'my-org-sidebar-note-tooltip',
             offset: 10
         });
@@ -640,41 +761,99 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         proxy.onclick = (e) => {
             e.stopPropagation();
 
-            // Immediate visual feedback for responsiveness
+            // Provides immediate visual feedback for responsiveness
             container.querySelectorAll('.my-org-proxy').forEach(p => p.classList.remove('is-active'));
             container.querySelectorAll(`.my-org-proxy[data-setting-id="${settingId}"]`).forEach(p => p.classList.add('is-active'));
 
-            // Find the current live element using the exact setting ID attribute
+            // Finds the current live element using the exact setting ID attribute
             const freshTarget = container.querySelector(`.vertical-tab-nav-item[data-setting-id="${settingId}"]:not(.my-org-proxy)`);
 
             if (freshTarget) {
                 freshTarget.click();
             } else {
-                // Fallback to original reference if the fresh element isn't found
+                // Falls back to original reference if the fresh element isn\'t found
                 if (originalItem) originalItem.click();
             }
         };
         return proxy;
     }
+
+    getMatchData(id, manifest, uiName, groupConfig) {
+        const { positive, negative } = this.parseKeywords(groupConfig.keywords);
+        if (positive.length === 0) return { posMatch: false };
+
+        const texts = [manifest.name.toLowerCase(), uiName.toLowerCase()];
+        const posMatch = positive.some(k => texts.some(t => t.includes(k)));
+
+        const isExcluded = negative.some(k => texts.some(t => t.includes(k)));
+        const isHidden = groupConfig.items && groupConfig.items.some(item => (item.id === id || item.name === manifest.name) && item.isExcluded);
+
+        return {
+            posMatch,
+            isExcluded,
+            isHidden
+        };
+    }
+
+    isPluginMatchedByGroup(id, manifest, uiName, groupConfig, ignoreExclusion = false) {
+        if (groupConfig.isLocked) {
+            if (!groupConfig.lockedPluginIds || !groupConfig.lockedPluginIds.includes(id)) {
+                return false;
+            }
+            if (!ignoreExclusion) {
+                const isHidden = groupConfig.items && groupConfig.items.some(item => (item.id === id || item.name === manifest.name) && item.isExcluded);
+                if (isHidden) return false;
+            }
+            return true;
+        }
+        const data = this.getMatchData(id, manifest, uiName, groupConfig);
+        if (!data.posMatch) return false;
+        if (data.isExcluded) return false;
+        if (!ignoreExclusion && data.isHidden) return false;
+        return true;
+    }
+
+    parseKeywords(keywordString) {
+        if (!keywordString) return { positive: [], negative: [] };
+        const parts = keywordString.split(',').map(k => k.trim()).filter(Boolean);
+        const positive = [];
+        const negative = [];
+        for (let p of parts) {
+            let isNegative = false;
+            if (p.startsWith('!')) {
+                isNegative = true;
+                p = p.substring(1).trim();
+            }
+            if (p.startsWith('"') && p.endsWith('"')) {
+                p = p.substring(1, p.length - 1).trim();
+            }
+            if (p) {
+                if (isNegative) negative.push(p.toLowerCase());
+                else positive.push(p.toLowerCase());
+            }
+        }
+        return { positive, negative };
+    }
 }
 
 class GroupConfigModal extends obsidian.Modal {
-    constructor(app, plugin, groupIndex) {
+    constructor(app, plugin, groupIndex, onSaveCallback) {
         super(app);
         this.plugin = plugin;
         this.groupIndex = groupIndex;
         this.group = this.plugin.settings.groups[groupIndex];
+        this.onSaveCallback = onSaveCallback;
         this.listContainer = null;
 
-        // State tracking for the Master Toggle and individual switches
         this.initialStates = {};
         this.pendingStates = {};
     }
 
     checkForChanges() {
         const isItemsChanged = JSON.stringify(this.originalItems) !== JSON.stringify(this.items);
+        const isList2Changed = JSON.stringify(this.originalList2) !== JSON.stringify(this.list2);
         const isStateChanged = Object.keys(this.pendingStates).some(id => this.pendingStates[id] !== this.initialStates[id]);
-        if (this.saveBtn) this.saveBtn.disabled = !(isItemsChanged || isStateChanged);
+        if (this.saveBtn) this.saveBtn.disabled = !(isItemsChanged || isList2Changed || isStateChanged);
     }
 
     updateSaveState() {
@@ -686,10 +865,31 @@ class GroupConfigModal extends obsidian.Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        new obsidian.Setting(contentEl)
+        this.allHidden = false;
+        this.allEnabled = true;
+
+        const titleSetting = new obsidian.Setting(contentEl)
             .setName(`Matched plugins in ${this.group.title}`)
-            .setDesc('Reorder, toggle, rename and write notes.')
+            .setDesc('Reorder, toggle, hide, rename and write notes.')
             .setHeading();
+
+        titleSetting.nameEl.style.display = 'flex';
+        titleSetting.nameEl.style.alignItems = 'center';
+
+        const masterToggleEl = titleSetting.nameEl.createDiv({ cls: 'my-org-plugin-toggle' });
+        masterToggleEl.style.marginLeft = '10px';
+
+        const masterToggle = new obsidian.ToggleComponent(masterToggleEl).setValue(this.allEnabled);
+        this.masterToggle = masterToggle;
+        this.plugin.addCustomTooltip(masterToggle.toggleEl, "Enable/Disable all plugins in this group", { position: 'top' });
+        masterToggle.onChange(val => {
+            if (this.isInitializing) return;
+            this.allEnabled = val;
+            this.items.forEach(i => this.pendingStates[i.id] = val);
+            this.list2.forEach(i => this.pendingStates[i.id] = val);
+            this.checkForChanges();
+            this.renderList();
+        });
 
         this.initialStates = {};
         this.pendingStates = {};
@@ -699,6 +899,7 @@ class GroupConfigModal extends obsidian.Modal {
         const keywords = this.group.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
         const allPluginsMap = this.app.plugins && this.app.plugins.manifests ? this.app.plugins.manifests : {};
         const matchedPlugins = [];
+        let knownTabsChanged = false;
 
         Object.keys(allPluginsMap).forEach(id => {
             const manifest = allPluginsMap[id];
@@ -709,13 +910,26 @@ class GroupConfigModal extends obsidian.Modal {
             let currentItems = this.group.items || [];
             const existingItem = currentItems.find(i => i.id === id || i.name === manifest.name);
 
-            // Critical fix: Disabled plugins don't have active tabs, but we must remember if they have a UI
-            const hasUI = isEnabled ? !!tab : (existingItem && existingItem.hasUI !== undefined ? existingItem.hasUI : false);
+            // Remembers if disabled plugins have a settings menu because Obsidian API hides tabs for disabled plugins
+            let hasUI = false;
+            if (isEnabled) {
+                hasUI = !!tab;
+                if (this.plugin.settings.knownPluginTabs[id] !== hasUI) {
+                    this.plugin.settings.knownPluginTabs[id] = hasUI;
+                    knownTabsChanged = true;
+                }
+            } else {
+                hasUI = this.plugin.settings.knownPluginTabs[id] || (existingItem && existingItem.hasUI !== undefined ? existingItem.hasUI : false);
+            }
 
-            if (keywords.some(k => manifest.name.toLowerCase().includes(k) || uiName.toLowerCase().includes(k))) {
+            if (this.plugin.isPluginMatchedByGroup(id, manifest, uiName, this.group, true)) {
                 matchedPlugins.push({ id, name: manifest.name, uiName, hasUI });
             }
         });
+
+        if (knownTabsChanged) {
+            this.plugin.saveSettings(false);
+        }
 
         let currentItems = this.group.items || [];
         this.list1 = [];
@@ -726,38 +940,67 @@ class GroupConfigModal extends obsidian.Modal {
             const existing = currentItems.find(i => i.name === p.name);
             const isEnabled = this.app.plugins.enabledPlugins.has(p.id);
 
-            // UI presence dynamically verified or restored from memory
+            // Inherits existing alias from any group if it exists
+            const globalAlias = this.plugin.getGlobalAlias(p.id);
+
+            // Restores UI presence from memory or verifies it dynamically
             if (p.hasUI) {
                 if (!existing) {
-                    newlyAddedList1.push({ name: p.name, id: p.id, alias: '', hasUI: true });
+                    newlyAddedList1.push({ name: p.name, id: p.id, alias: globalAlias, hasUI: true, isExcluded: false });
+                } else if (!existing.alias && globalAlias) {
+                    existing.alias = globalAlias; // Syncs missing alias
                 }
             } else {
-                this.list2.push(p);
+                if (existing) {
+                    existing.id = p.id;
+                    existing.hasUI = false;
+                    existing.isExcluded = !!existing.isExcluded;
+                    if (!existing.alias && globalAlias) existing.alias = globalAlias;
+                    this.list2.push(existing);
+                } else {
+                    this.list2.push({ name: p.name, id: p.id, alias: globalAlias, hasUI: false, isExcluded: false });
+                }
             }
 
             this.initialStates[p.id] = isEnabled;
             this.pendingStates[p.id] = isEnabled;
         });
 
-        // Reconstruct list1 in the saved custom order
+        // Reconstructs list1 in the saved custom order
         currentItems.forEach(existingItem => {
             const stillMatchesAndHasUI = matchedPlugins.find(p => p.name === existingItem.name && p.hasUI);
             if (stillMatchesAndHasUI) {
-                existingItem.id = stillMatchesAndHasUI.id; // Update ID just in case
-                existingItem.hasUI = true; // Ensure explicitly saved
+                existingItem.id = stillMatchesAndHasUI.id; // Updates ID
+                existingItem.hasUI = true; // Ensures explicitly saved
+                existingItem.isExcluded = !!existingItem.isExcluded;
                 this.list1.push(existingItem);
             }
         });
 
-        // Sort newly added items alphabetically (case insensitive) and append to list1
+        // Sorts newly added items alphabetically (case insensitive) and appends to list1
         newlyAddedList1.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
         this.list1.push(...newlyAddedList1);
 
         this.list2.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
         this.originalItems = JSON.parse(JSON.stringify(this.list1));
         this.items = JSON.parse(JSON.stringify(this.list1));
+        this.originalList2 = JSON.parse(JSON.stringify(this.list2));
+        this.list2 = JSON.parse(JSON.stringify(this.list2));
 
-        // Prevent Obsidian's auto-focus from highlighting the sort select menu or inputs
+        const totalItems = [...this.list1, ...this.list2];
+        if (totalItems.length > 0) {
+            this.isInitializing = true;
+            this.allEnabled = totalItems.every(i => this.initialStates[i.id]);
+            if (this.masterToggle) {
+                this.masterToggle.setValue(this.allEnabled);
+            }
+            if (this.list1.length > 0) {
+                this.allHidden = this.list1.every(i => i.isExcluded);
+            }
+            this.isInitializing = false;
+        }
+
+        // Prevents Obsidian's auto-focus from highlighting the sort select menu or inputs
         setTimeout(() => {
             const active = document.activeElement;
             if (active && (active.tagName === 'SELECT' || active.tagName === 'INPUT')) {
@@ -767,91 +1010,7 @@ class GroupConfigModal extends obsidian.Modal {
 
         this.listContainer = contentEl.createDiv({ cls: 'my-org-modal-list' });
 
-        // Global drop zone logic to capture drops even in gaps between elements
-        this.listContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            if (this.draggedIndex === null || this.draggedIndex === undefined) return;
 
-            this.listContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
-                el.classList.remove('drop-target-above', 'drop-target-below');
-            });
-
-            let closestRow = null;
-            let closestDist = Infinity;
-            const rows = Array.from(this.listContainer.querySelectorAll('.my-org-draggable-row'));
-
-            rows.forEach(r => {
-                const rect = r.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-                const dist = Math.abs(e.clientY - midY);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestRow = r;
-                }
-            });
-
-            if (closestRow) {
-                const rect = closestRow.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-                if (e.clientY < midY) {
-                    closestRow.classList.add('drop-target-above');
-                } else {
-                    closestRow.classList.add('drop-target-below');
-                }
-            }
-        });
-
-        this.listContainer.addEventListener('dragleave', (e) => {
-            if (e.target === this.listContainer) {
-                this.listContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
-                    el.classList.remove('drop-target-above', 'drop-target-below');
-                });
-            }
-        });
-
-        this.listContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (this.draggedIndex === null || this.draggedIndex === undefined) return;
-
-            this.listContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
-                el.classList.remove('drop-target-above', 'drop-target-below');
-            });
-
-            let closestRow = null;
-            let closestDist = Infinity;
-            let closestIndex = -1;
-            const rows = Array.from(this.listContainer.querySelectorAll('.my-org-draggable-row'));
-
-            rows.forEach((r, idx) => {
-                const rect = r.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-                const dist = Math.abs(e.clientY - midY);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestRow = r;
-                    closestIndex = idx;
-                }
-            });
-
-            if (closestRow && closestIndex !== -1) {
-                const fromIndex = this.draggedIndex;
-                let toIndex = closestIndex;
-                const rect = closestRow.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-
-                if (e.clientY >= midY) toIndex++;
-                if (fromIndex < toIndex) toIndex--;
-
-                if (fromIndex !== toIndex) {
-                    const itemToMove = this.items.splice(fromIndex, 1)[0];
-                    this.items.splice(toIndex, 0, itemToMove);
-                    this.checkForChanges();
-                    this.renderList();
-                }
-            }
-            this.draggedIndex = null;
-        });
 
         this.renderList();
 
@@ -859,16 +1018,32 @@ class GroupConfigModal extends obsidian.Modal {
         this.saveBtn = btnDiv.createEl('button', { text: 'Save changes', cls: 'mod-cta' });
         this.saveBtn.disabled = true;
         this.saveBtn.onclick = async () => {
-            this.plugin.settings.groups[this.groupIndex].items = this.items;
+            const combinedItems = [...this.items, ...this.list2];
+            this.plugin.settings.groups[this.groupIndex].items = combinedItems;
 
-            // Just save data, don't rebuild UI yet because we are about to block the thread
+            // Syncs aliases across all other groups based on unique plugin ID
+            const aliasMap = {};
+            combinedItems.forEach(i => {
+                if (i.alias !== undefined) aliasMap[i.id] = i.alias;
+            });
+
+            this.plugin.settings.groups.forEach((g, idx) => {
+                if (idx === this.groupIndex) return;
+                g.items.forEach(gItem => {
+                    if (aliasMap[gItem.id] !== undefined) {
+                        gItem.alias = aliasMap[gItem.id];
+                    }
+                });
+            });
+
+            // Saves data before blocking the thread
             await this.plugin.saveSettings(false);
 
             let stateChanged = false;
             const pluginManager = this.app.plugins;
 
             for (const [id, willEnable] of Object.entries(this.pendingStates)) {
-                if (id === this.plugin.manifest.id) continue; // Safety check: prevent the plugin from disabling itself
+                if (id === this.plugin.manifest.id) continue;
 
                 const wasEnabled = this.initialStates[id];
                 if (willEnable && !wasEnabled) {
@@ -886,10 +1061,12 @@ class GroupConfigModal extends obsidian.Modal {
 
             this.close();
 
-            // Refresh the sidebar layout natively in ONE synchronous step to prevent flashes
+            // Refreshes the sidebar layout synchronously to prevent visual flashes
             document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
             document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
             this.plugin.checkAndApply();
+
+            if (this.onSaveCallback) this.onSaveCallback();
         };
     }
 
@@ -910,30 +1087,96 @@ class GroupConfigModal extends obsidian.Modal {
                 const dragHandle = ctrls.createDiv({ cls: 'my-org-modal-drag-handle' });
                 obsidian.setIcon(dragHandle, 'menu');
 
-                // Enable draggable dynamically on mousedown to allow drag only from the handle
-                // This prevents text selection issues in the input while keeping drag-and-drop flawless
-                row.addEventListener('mousedown', (e) => {
-                    if (dragHandle.contains(e.target)) {
-                        row.setAttribute('draggable', 'true');
-                    } else {
-                        row.removeAttribute('draggable');
+                const onPointerMove = (pe) => {
+                    parentContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
+                        el.classList.remove('drop-target-above', 'drop-target-below');
+                    });
+
+                    let closestRow = null;
+                    let closestDist = Infinity;
+                    const rows = Array.from(parentContainer.querySelectorAll('.my-org-draggable-row'));
+
+                    rows.forEach(r => {
+                        const rect = r.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        const dist = Math.abs(pe.clientY - midY);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestRow = r;
+                        }
+                    });
+
+                    if (closestRow) {
+                        const rect = closestRow.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        if (pe.clientY < midY) {
+                            closestRow.classList.add('drop-target-above');
+                        } else {
+                            closestRow.classList.add('drop-target-below');
+                        }
                     }
-                });
 
-                row.addEventListener('dragstart', (e) => {
-                    this.draggedIndex = index;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', index);
-                    setTimeout(() => row.classList.add('is-dragging'), 0);
-                });
+                    // Auto-scrolls when mouse is near container edges
+                    const containerRect = parentContainer.getBoundingClientRect();
+                    const threshold = 40;
+                    if (pe.clientY - containerRect.top < threshold) {
+                        parentContainer.scrollTop -= 8;
+                    } else if (containerRect.bottom - pe.clientY < threshold) {
+                        parentContainer.scrollTop += 8;
+                    }
+                };
 
-                row.addEventListener('dragend', () => {
-                    row.removeAttribute('draggable');
+                const onPointerUp = (pe) => {
                     row.classList.remove('is-dragging');
                     parentContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
                         el.classList.remove('drop-target-above', 'drop-target-below');
                     });
+
+                    let closestRow = null;
+                    let closestDist = Infinity;
+                    let closestIndex = -1;
+                    const rows = Array.from(parentContainer.querySelectorAll('.my-org-draggable-row'));
+
+                    rows.forEach((r, idx) => {
+                        const rect = r.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        const dist = Math.abs(pe.clientY - midY);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestRow = r;
+                            closestIndex = idx;
+                        }
+                    });
+
+                    if (closestRow && closestIndex !== -1) {
+                        const fromIndex = this.draggedIndex;
+                        let toIndex = closestIndex;
+                        const rect = closestRow.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+
+                        if (pe.clientY >= midY) toIndex++;
+                        if (fromIndex < toIndex) toIndex--;
+
+                        if (fromIndex !== toIndex) {
+                            const itemToMove = this.items.splice(fromIndex, 1)[0];
+                            this.items.splice(toIndex, 0, itemToMove);
+                            this.checkForChanges();
+                            this.renderList();
+                        }
+                    }
+
                     this.draggedIndex = null;
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                };
+
+                dragHandle.addEventListener('pointerdown', (pe) => {
+                    pe.preventDefault();
+                    this.draggedIndex = index;
+                    row.classList.add('is-dragging');
+
+                    window.addEventListener('pointermove', onPointerMove);
+                    window.addEventListener('pointerup', onPointerUp);
                 });
             }
 
@@ -941,22 +1184,47 @@ class GroupConfigModal extends obsidian.Modal {
 
             const toggleEl = ctrls.createDiv({ cls: 'my-org-plugin-toggle' });
             const toggleComp = new obsidian.ToggleComponent(toggleEl)
-                .setValue(currentState)
-                .onChange(val => {
-                    this.pendingStates[item.id] = val;
+                .setValue(currentState);
+
+            this.plugin.addCustomTooltip(toggleComp.toggleEl, () => this.pendingStates[item.id] ? "Disable this plugin (NOT matching)" : "Enable this plugin (NOT matching)", { position: 'top' });
+
+            let eyeIconEl = null;
+            let updateEyeIcon = () => { };
+
+            if (isList1) {
+                eyeIconEl = ctrls.createDiv({ cls: 'my-org-exclude-icon clickable-icon' });
+                updateEyeIcon = () => {
+                    const isCrossed = !this.pendingStates[item.id] || item.isExcluded;
+                    obsidian.setIcon(eyeIconEl, isCrossed ? 'eye-off' : 'eye');
+                    eyeIconEl.classList.toggle('is-hidden', !!isCrossed);
+                };
+                updateEyeIcon();
+
+                this.plugin.addCustomTooltip(eyeIconEl, () => item.isExcluded ? "Show (in this group)" : "Hide (in this group)", { position: 'top' });
+
+                eyeIconEl.onclick = () => {
+                    if (!this.pendingStates[item.id]) return;
+                    item.isExcluded = !item.isExcluded;
+                    updateEyeIcon();
+                    updateNameStyle();
                     this.checkForChanges();
+                };
+            }
 
-                    const nameNode = row.querySelector('.my-org-modal-item-name');
-                    if (nameNode) {
-                        if (val) nameNode.classList.remove('is-disabled');
-                        else nameNode.classList.add('is-disabled');
-                    }
-                });
+            const nameNode = row.createDiv({ text: item.name });
+            const updateNameStyle = () => {
+                nameNode.className = 'my-org-modal-item-name';
+                if (!this.pendingStates[item.id]) nameNode.classList.add('is-disabled');
+                if (isList1 && item.isExcluded) nameNode.classList.add('is-hidden');
+            };
+            updateNameStyle();
 
-            this.plugin.addCustomTooltip(toggleComp.toggleEl, "Enable/disable this plugin (NOT matching)", { position: 'top' });
-
-            const nameCls = currentState ? 'my-org-modal-item-name' : 'my-org-modal-item-name is-disabled';
-            row.createDiv({ cls: nameCls, text: item.name });
+            toggleComp.onChange(val => {
+                this.pendingStates[item.id] = val;
+                this.checkForChanges();
+                updateNameStyle();
+                updateEyeIcon();
+            });
 
             if (isList1) {
                 const input = row.createEl('input', { type: 'text', placeholder: 'Alias...' });
@@ -967,15 +1235,16 @@ class GroupConfigModal extends obsidian.Modal {
                 };
             }
 
-            const noteText = this.plugin.settings.pluginNotes[item.id];
-            const noteBtn = row.createDiv({ cls: `my-org-modal-btn my-org-note-btn ${noteText ? 'has-note' : ''}` });
+            const cleanNoteText = this.plugin.getCleanNote(item.id);
+            const noteBtn = row.createDiv({ cls: `my-org-modal-btn my-org-note-btn ${cleanNoteText ? 'has-note' : ''}` });
             obsidian.setIcon(noteBtn, 'file-text');
 
             this.plugin.addCustomTooltip(noteBtn, () => {
-                const text = this.plugin.settings.pluginNotes[item.id];
+                const text = this.plugin.getCleanNote(item.id);
                 if (text) return text;
+                const fallback = document.createElement('div');
                 fallback.className = 'my-org-note-fallback';
-                fallback.innerText = "Write a note about this plugin...";
+                fallback.innerText = "Click to add note";
                 return fallback;
             }, { position: 'top', extraClass: 'my-org-note-tooltip', alwaysShow: true });
 
@@ -990,7 +1259,18 @@ class GroupConfigModal extends obsidian.Modal {
             const headerRow = this.listContainer.createDiv({ cls: 'my-org-toolbar-row' });
 
             const leftDiv = headerRow.createDiv({ cls: 'my-org-toolbar-left' });
-            leftDiv.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins with a settings menu (${this.items.length}):` });
+            leftDiv.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins with a settings menu (${this.items.length})` });
+
+            const masterEye = leftDiv.createDiv({ cls: 'clickable-icon' });
+            obsidian.setIcon(masterEye, this.allHidden ? 'eye-off' : 'eye');
+            this.plugin.addCustomTooltip(masterEye, "Hide/Unhide plugins with a settings menu", { position: 'bottom' });
+            masterEye.onclick = () => {
+                this.allHidden = !this.allHidden;
+                obsidian.setIcon(masterEye, this.allHidden ? 'eye-off' : 'eye');
+                this.items.forEach(i => i.isExcluded = this.allHidden);
+                this.checkForChanges();
+                this.renderList();
+            };
 
             const resetBtn = leftDiv.createDiv({ cls: 'clickable-icon' });
             obsidian.setIcon(resetBtn, 'rotate-ccw');
@@ -1033,7 +1313,7 @@ class GroupConfigModal extends obsidian.Modal {
             const list2HeaderRow = this.listContainer.createDiv({ cls: 'my-org-toolbar-row' });
 
             const leftDiv2 = list2HeaderRow.createDiv({ cls: 'my-org-toolbar-left' });
-            leftDiv2.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins without a settings menu (${this.list2.length}):` });
+            leftDiv2.createDiv({ cls: 'my-org-tt-header-title', text: `Plugins without a settings menu (${this.list2.length})` });
 
             const rightDiv2 = list2HeaderRow.createDiv({ cls: 'my-org-toolbar-right' });
             rightDiv2.createDiv({ cls: 'my-org-notes-header', text: '' });
@@ -1046,24 +1326,118 @@ class GroupConfigModal extends obsidian.Modal {
     onClose() {
         const { contentEl } = this;
         contentEl.empty();
+        if (this.dragWheelHandler) {
+            window.removeEventListener('wheel', this.dragWheelHandler);
+            this.dragWheelHandler = null;
+        }
     }
 }
 
 class OrganizerSettingTab extends obsidian.PluginSettingTab {
     constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
+
+    bindBadgeHoverLogic(badge) {
+        badge.addEventListener('mouseenter', () => {
+            if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
+            const tooltipData = badge.tooltipDataObject;
+            if (!tooltipData) return;
+
+            const tooltipEl = document.createElement('div');
+            tooltipEl.className = 'my-org-custom-tooltip';
+
+            const line1 = tooltipEl.createDiv({ cls: 'my-org-modal-help-text my-org-tt-help-1' });
+            line1.appendChild(document.createTextNode("Use "));
+            line1.createSpan({ text: "," });
+            line1.appendChild(document.createTextNode(" to separate. Prefix with "));
+            line1.createSpan({ text: "!" });
+            line1.appendChild(document.createTextNode(" to exclude."));
+
+            const line2 = tooltipEl.createDiv({ cls: 'my-org-modal-help-text' });
+            line2.appendChild(document.createTextNode("Example: "));
+            line2.createSpan({ text: "table, !\"advanced table\", sidebar organizer" });
+
+            if (tooltipData.length === 0) {
+                tooltipEl.createDiv({ cls: 'my-org-tt-line', text: 'No plugins match these keywords.' });
+            } else {
+                const uiPlugins = [];
+                const noUiPlugins = [];
+
+                tooltipData.forEach(item => {
+                    const isEnabled = this.plugin.app.plugins.enabledPlugins.has(item.id);
+                    const processedItem = { ...item, isEnabled: isEnabled };
+
+                    if (processedItem.hasUI) uiPlugins.push(processedItem);
+                    else noUiPlugins.push(processedItem);
+                });
+
+                const renderPluginLine = (container, p, displayIndex) => {
+                    const line = container.createDiv({ cls: 'my-org-tt-line' });
+                    if (!p.isEnabled || (p.matchData && p.matchData.isExcluded) || (p.matchData && p.matchData.isHidden)) {
+                        line.classList.add('is-disabled');
+                    }
+
+                    const counter = displayIndex + 1;
+                    const space = counter < 10 ? '\u00A0' : '';
+                    line.createSpan({ text: `${space}${counter}. ` });
+
+                    line.createSpan({ cls: 'my-org-tt-name', text: p.manifestName });
+
+                    if (p.uiName) {
+                        line.createSpan({ cls: 'my-org-tt-muted', text: ' (sidebar: ' });
+                        line.createSpan({ cls: 'my-org-tt-white', text: p.uiName });
+                        line.createSpan({ cls: 'my-org-tt-muted', text: ')' });
+                    }
+
+                    if (!p.isEnabled) {
+                        line.createSpan({ cls: 'my-org-tt-status', text: ' (disabled)' });
+                    }
+
+                    if (p.matchData && p.matchData.isHidden) {
+                        line.createSpan({ cls: 'my-org-tt-status', text: ' (hidden)' });
+                    }
+
+                    if (p.otherGroups.length > 0) {
+                        line.createSpan({ cls: 'my-org-tt-others', text: ` [also in: ${p.otherGroups.join(', ')}]` });
+                    }
+                };
+
+                const uiBlock = tooltipEl.createDiv();
+                if (uiPlugins.length > 0) {
+                    uiBlock.createDiv({ cls: 'my-org-tt-header', text: 'Plugins with a settings menu' });
+                    uiPlugins.forEach((p, idx) => renderPluginLine(uiBlock, p, idx));
+                }
+
+                if (noUiPlugins.length > 0) {
+                    const noUiBlock = tooltipEl.createDiv();
+                    if (uiPlugins.length > 0) {
+                        noUiBlock.classList.add('my-org-tt-spacing');
+                    }
+                    noUiBlock.createDiv({ cls: 'my-org-tt-header', text: 'Plugins without a settings menu' });
+                    noUiPlugins.forEach((p, idx) => renderPluginLine(noUiBlock, p, idx));
+                }
+            }
+
+            document.body.appendChild(tooltipEl);
+            this.plugin.activeTooltip = tooltipEl;
+
+            const badgeRect = badge.getBoundingClientRect();
+            const tooltipRect = tooltipEl.getBoundingClientRect();
+            tooltipEl.style.left = `${badgeRect.left + (badgeRect.width / 2) - (tooltipRect.width / 2)}px`;
+            tooltipEl.style.top = `${badgeRect.top - tooltipRect.height - 8}px`;
+        });
+
+        badge.addEventListener('mouseleave', () => {
+            if (this.plugin.activeTooltip) {
+                this.plugin.activeTooltip.remove();
+                this.plugin.activeTooltip = null;
+            }
+        });
+    }
+
     display() {
         const { containerEl } = this;
         containerEl.empty();
 
-        new obsidian.Setting(containerEl)
-            .setName('Show ungrouped plugins')
-            .setDesc('Move plugins that do not match any group into a special "Ungrouped" folder.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showUngrouped)
-                .onChange(async (value) => {
-                    this.plugin.settings.showUngrouped = value;
-                    await this.plugin.saveSettings();
-                }));
 
         new obsidian.Setting(containerEl)
             .setName('Collapsible headers')
@@ -1100,6 +1474,54 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     await this.plugin.saveSettings(true);
                 }));
 
+        new obsidian.Setting(containerEl)
+            .setName('Show search bar')
+            .setDesc('Display a search bar above community plugins to filter by alias or name.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showSearchBar)
+                .onChange(async (value) => {
+                    this.plugin.settings.showSearchBar = value;
+                    await this.plugin.saveSettings(true);
+                }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Show ungrouped plugins')
+            .setDesc('Move plugins that do not match any group into a special "Ungrouped" folder.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showUngrouped)
+                .onChange(async (value) => {
+                    this.plugin.settings.showUngrouped = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        containerEl.createEl('hr');
+
+        new obsidian.Setting(containerEl)
+            .setName('Sidebar notes tooltip position')
+            .setDesc('Choose where the note tooltip should appear when hovering over community plugins in the sidebar.')
+            .addDropdown(dropdown => dropdown
+                .addOption('left', 'Left')
+                .addOption('right', 'Right')
+                .addOption('hidden', 'Hidden')
+                .setValue(this.plugin.settings.sidebarTooltipPosition || 'left')
+                .onChange(async (value) => {
+                    this.plugin.settings.sidebarTooltipPosition = value;
+                    await this.plugin.saveSettings(true);
+                }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Auto-add notes')
+            .setDesc('Automatically create notes with official descriptions for newly installed plugins (or add to existing notes if missing).')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.autoAppendDesc || false)
+                .onChange(async (value) => {
+                    this.plugin.settings.autoAppendDesc = value;
+                    await this.plugin.saveSettings(true);
+                    if (value) {
+                        new BulkAppendModal(this.app, this.plugin, () => { }).open();
+                    }
+                }));
+
         let notesBtnEl = null;
 
         new obsidian.Setting(containerEl)
@@ -1117,9 +1539,13 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                                 if (notesBtnEl) notesBtnEl.classList.add('is-active');
                                 await this.plugin.loadNotesFromFile();
                             } else {
-                                if (notesBtnEl) notesBtnEl.classList.remove('is-active');
                                 await this.plugin.saveNotesToFile();
-                                new obsidian.Notice('Created new sync file and exported existing notes.');
+                                if (await this.app.vault.adapter.exists(value)) {
+                                    if (notesBtnEl) notesBtnEl.classList.add('is-active');
+                                    new obsidian.Notice('Created new sync file and exported existing notes.');
+                                } else {
+                                    if (notesBtnEl) notesBtnEl.classList.remove('is-active');
+                                }
                             }
                         } else {
                             if (notesBtnEl) notesBtnEl.classList.remove('is-active');
@@ -1164,115 +1590,361 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             });
 
         containerEl.createEl('hr');
-        new obsidian.Setting(containerEl).setName('Grouped community plugins').setHeading();
+        const groupedHeading = new obsidian.Setting(containerEl).setHeading();
+        groupedHeading.nameEl.appendText('Grouped community plugins ');
+        groupedHeading.nameEl.createSpan({ text: `(${this.plugin.settings.groups.length} groups)`, cls: 'my-org-counter' });
 
-        // Global API scanner to infallibly detect all settings menus
-        const recalculateAllMatches = () => {
-            const pluginMatches = {};
-            const allPluginsMap = this.app.plugins && this.app.plugins.manifests ? this.app.plugins.manifests : {};
+        let allCollapsed = this.plugin.settings.groups.length > 0 && this.plugin.settings.groups.every((g, i) => this.plugin.settings.collapsedSettingGroups[i]);
 
-            const knownUiStates = {};
-            this.plugin.settings.groups.forEach(g => {
-                if (g.items) {
-                    g.items.forEach(item => {
-                        if (item.hasUI) knownUiStates[item.id || item.name] = true;
+        groupedHeading.addExtraButton(b => {
+            b.setIcon(allCollapsed ? 'chevrons-down' : 'chevrons-up')
+                .setTooltip(allCollapsed ? 'Expand all groups' : 'Collapse all groups')
+                .onClick(async () => {
+                    const willCollapse = !allCollapsed;
+                    this.plugin.settings.groups.forEach((g, i) => {
+                        this.plugin.settings.collapsedSettingGroups[i] = willCollapse;
                     });
+                    await this.plugin.saveSettings();
+                    this.display();
+                });
+            b.extraSettingsEl.style.marginRight = '8px';
+        });
+
+        const sortContainer = groupedHeading.controlEl.createDiv({ cls: 'my-org-global-sort-container' });
+        const sortSelect = sortContainer.createEl('select', { cls: 'dropdown my-org-sort-select' });
+        sortSelect.add(new Option('Sort by...', 'none'));
+        sortSelect.add(new Option('Title A-Z', 'az'));
+        sortSelect.add(new Option('Title Z-A', 'za'));
+        sortSelect.onchange = async () => {
+            const val = sortSelect.value;
+            if (val === 'none') return;
+            sortSelect.value = 'none';
+
+            const indexMap = Array.from({ length: this.plugin.settings.groups.length }, (_, i) => i);
+
+            if (val === 'az') {
+                indexMap.sort((a, b) => this.plugin.settings.groups[a].title.localeCompare(this.plugin.settings.groups[b].title, undefined, { sensitivity: 'base' }));
+            } else if (val === 'za') {
+                indexMap.sort((a, b) => this.plugin.settings.groups[b].title.localeCompare(this.plugin.settings.groups[a].title, undefined, { sensitivity: 'base' }));
+            }
+
+            const newGroups = [];
+            const newCollapsedGroups = {};
+            const newCollapsedSettingGroups = {};
+
+            if (this.plugin.settings.collapsedGroups['Ungrouped'] !== undefined) {
+                newCollapsedGroups['Ungrouped'] = this.plugin.settings.collapsedGroups['Ungrouped'];
+            }
+
+            indexMap.forEach((oldIndex, newIndex) => {
+                newGroups.push(this.plugin.settings.groups[oldIndex]);
+                if (this.plugin.settings.collapsedGroups[oldIndex] !== undefined) {
+                    newCollapsedGroups[newIndex] = this.plugin.settings.collapsedGroups[oldIndex];
+                }
+                if (this.plugin.settings.collapsedSettingGroups[oldIndex] !== undefined) {
+                    newCollapsedSettingGroups[newIndex] = this.plugin.settings.collapsedSettingGroups[oldIndex];
                 }
             });
 
+            this.plugin.settings.groups = newGroups;
+            this.plugin.settings.collapsedGroups = newCollapsedGroups;
+            this.plugin.settings.collapsedSettingGroups = newCollapsedSettingGroups;
+
+            await this.plugin.saveSettings();
+            sortSelect.blur();
+            const scrollEl = containerEl.closest ? (containerEl.closest('.vertical-tab-content') || containerEl) : containerEl;
+            const st = scrollEl.scrollTop;
+            this.display();
+            setTimeout(() => { if (scrollEl) scrollEl.scrollTop = st; }, 0);
+        };
+
+        const recalculateAllMatches = () => {
+            const pluginMatches = {};
+            const allPluginsMap = this.app.plugins && this.app.plugins.manifests ? this.app.plugins.manifests : {};
             const tabsMap = {};
             if (this.app.setting.pluginTabs) {
                 this.app.setting.pluginTabs.forEach(t => tabsMap[t.id] = t);
             }
 
+            let knownTabsChanged = false;
+
             Object.keys(allPluginsMap).forEach(id => {
                 const manifest = allPluginsMap[id];
-                // Deep API check for settings tab registration using optimized map
                 const tab = tabsMap[id];
+                const isEnabled = this.app.plugins.enabledPlugins.has(id);
+
+                let hasUI = false;
+                if (isEnabled) {
+                    hasUI = !!tab;
+                    if (this.plugin.settings.knownPluginTabs[id] !== hasUI) {
+                        this.plugin.settings.knownPluginTabs[id] = hasUI;
+                        knownTabsChanged = true;
+                    }
+                } else {
+                    hasUI = this.plugin.settings.knownPluginTabs[id] || false;
+                }
 
                 pluginMatches[id] = {
                     id: id,
                     manifestName: manifest.name,
                     uiName: tab ? tab.name : manifest.name,
                     groups: [],
-                    groupIndices: [], // Store precise array indices for bulletproof matching
-                    // Trust hardware state first, fallback to our saved persistent memory if disabled
-                    hasUI: !!tab || !!knownUiStates[id] || !!knownUiStates[manifest.name]
+                    groupIndices: [],
+                    groupsMap: {},
+                    hasUI: hasUI
                 };
             });
 
+            if (knownTabsChanged) {
+                this.plugin.saveSettings(false);
+            }
+
             this.plugin.settings.groups.forEach((g, idx) => {
-                const kws = g.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-                if (kws.length > 0) {
-                    Object.keys(pluginMatches).forEach(id => {
-                        const p = pluginMatches[id];
-                        if (kws.some(k => p.manifestName.toLowerCase().includes(k) || p.uiName.toLowerCase().includes(k))) {
-                            p.groups.push(g.title);
-                            p.groupIndices.push(idx); // Link matches to specific group index
+                Object.keys(pluginMatches).forEach(id => {
+                    const p = pluginMatches[id];
+                    const manifest = allPluginsMap[id];
+                    const matchData = this.plugin.getMatchData(id, manifest, p.uiName, g);
+
+                    if (g.isLocked) {
+                        if (!g.lockedPluginIds || !g.lockedPluginIds.includes(id)) {
+                            matchData.posMatch = false;
                         }
-                    });
-                }
+                    }
+
+                    p.groupsMap[idx] = matchData;
+
+                    if (matchData.posMatch && !matchData.isExcluded) {
+                        p.groups.push(g.title);
+                        p.groupIndices.push(idx);
+                    }
+                });
             });
             return pluginMatches;
         };
 
-        // Array to hold the live-update functions for our badges
         const badgeUpdaters = [];
 
-        this.plugin.settings.groups.forEach((group, index) => {
-            const div = containerEl.createDiv({ cls: 'my-org-group-card' });
+        const listContainer = containerEl.createDiv({ cls: 'my-org-group-list' });
 
-            const headerSetting = new obsidian.Setting(div)
-                .setName(`Group ${index + 1}`)
-                .setHeading();
+
+
+        this.plugin.settings.groups.forEach((group, index) => {
+            const isCollapsed = this.plugin.settings.collapsedSettingGroups[index] || false;
+            const div = listContainer.createDiv({ cls: 'my-org-group-card my-org-group-draggable-row' });
+
+            const headerSetting = new obsidian.Setting(div).setHeading();
+
+            headerSetting.nameEl.style.display = 'flex';
+            headerSetting.nameEl.style.alignItems = 'center';
+            headerSetting.nameEl.style.gap = '8px';
+
+            const dragHandle = headerSetting.nameEl.createSpan({ cls: 'clickable-icon my-org-drag-handle' });
+            obsidian.setIcon(dragHandle, 'menu');
+            obsidian.setTooltip(dragHandle, 'Drag to reorder');
+            dragHandle.style.cursor = 'grab';
+
+            const collapseBtn = headerSetting.nameEl.createSpan({ cls: 'my-org-collapse-icon clickable-icon' });
+            obsidian.setIcon(collapseBtn, isCollapsed ? 'chevron-right' : 'chevron-down');
+            collapseBtn.onclick = async () => {
+                this.plugin.settings.collapsedSettingGroups[index] = !isCollapsed;
+                await this.plugin.saveSettings();
+                this.display();
+            };
+
+            const onPointerMove = (pe) => {
+                listContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
+                    el.classList.remove('drop-target-above', 'drop-target-below');
+                });
+
+                let closestRow = null;
+                let closestDist = Infinity;
+                const rows = Array.from(listContainer.querySelectorAll('.my-org-group-draggable-row'));
+
+                rows.forEach(r => {
+                    const rect = r.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    const dist = Math.abs(pe.clientY - midY);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestRow = r;
+                    }
+                });
+
+                if (closestRow) {
+                    const rect = closestRow.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    if (pe.clientY < midY) {
+                        closestRow.classList.add('drop-target-above');
+                    } else {
+                        closestRow.classList.add('drop-target-below');
+                    }
+                }
+
+                // Auto-scrolls vertical settings tab when mouse is near container edges
+                const scrollTarget = containerEl.closest('.vertical-tab-content') || containerEl;
+                const scrollRect = scrollTarget.getBoundingClientRect();
+                const threshold = 50;
+                if (pe.clientY - scrollRect.top < threshold) {
+                    scrollTarget.scrollTop -= 8;
+                } else if (scrollRect.bottom - pe.clientY < threshold) {
+                    scrollTarget.scrollTop += 8;
+                }
+            };
+
+            const onPointerUp = async (pe) => {
+                div.classList.remove('is-dragging');
+                listContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
+                    el.classList.remove('drop-target-above', 'drop-target-below');
+                });
+
+                let closestRow = null;
+                let closestDist = Infinity;
+                let closestIndex = -1;
+                const rows = Array.from(listContainer.querySelectorAll('.my-org-group-draggable-row'));
+
+                rows.forEach((r, idx) => {
+                    const rect = r.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    const dist = Math.abs(pe.clientY - midY);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestRow = r;
+                        closestIndex = idx;
+                    }
+                });
+
+                if (closestRow && closestIndex !== -1) {
+                    const fromIndex = this.draggedGroupIndex;
+                    let toIndex = closestIndex;
+                    const rect = closestRow.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+
+                    if (pe.clientY >= midY) toIndex++;
+                    if (fromIndex < toIndex) toIndex--;
+
+                    if (fromIndex !== toIndex) {
+                        const itemToMove = this.plugin.settings.groups.splice(fromIndex, 1)[0];
+                        this.plugin.settings.groups.splice(toIndex, 0, itemToMove);
+
+                        const indexMap = Array.from({ length: this.plugin.settings.groups.length }, (_, i) => i);
+                        const idxToMove = indexMap.splice(fromIndex, 1)[0];
+                        indexMap.splice(toIndex, 0, idxToMove);
+
+                        const oldCollapsedGroups = { ...this.plugin.settings.collapsedGroups };
+                        const oldCollapsedSettingGroups = { ...this.plugin.settings.collapsedSettingGroups };
+
+                        const newCollapsedGroups = {};
+                        const newCollapsedSettingGroups = {};
+
+                        if (oldCollapsedGroups['Ungrouped'] !== undefined) {
+                            newCollapsedGroups['Ungrouped'] = oldCollapsedGroups['Ungrouped'];
+                        }
+
+                        indexMap.forEach((oldIndex, newIndex) => {
+                            if (oldCollapsedGroups[oldIndex] !== undefined) {
+                                newCollapsedGroups[newIndex] = oldCollapsedGroups[oldIndex];
+                            }
+                            if (oldCollapsedSettingGroups[oldIndex] !== undefined) {
+                                newCollapsedSettingGroups[newIndex] = oldCollapsedSettingGroups[oldIndex];
+                            }
+                        });
+
+                        this.plugin.settings.collapsedGroups = newCollapsedGroups;
+                        this.plugin.settings.collapsedSettingGroups = newCollapsedSettingGroups;
+
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                }
+
+                this.draggedGroupIndex = null;
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', onPointerUp);
+            };
+
+            dragHandle.addEventListener('pointerdown', (pe) => {
+                pe.preventDefault();
+                this.draggedGroupIndex = index;
+                div.classList.add('is-dragging');
+
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+            });
+
+
+            let headerBadge = null;
+            if (isCollapsed) {
+                const titleSpan = headerSetting.nameEl.createSpan({ text: group.title });
+                titleSpan.style.color = 'var(--text-muted)';
+                titleSpan.style.fontWeight = 'normal';
+
+                headerBadge = headerSetting.nameEl.createSpan({ cls: 'my-org-match-badge' });
+                this.bindBadgeHoverLogic(headerBadge);
+            }
+
+            headerSetting.addExtraButton(b => {
+                const isLocked = group.isLocked || false;
+                b.setIcon(isLocked ? 'lock' : 'unlock')
+                    .setTooltip(isLocked ? 'Unlock to allow new plugins' : 'Lock to prevent new matches');
+                if (isLocked) b.extraSettingsEl.style.color = 'var(--interactive-accent)';
+                b.onClick(async () => {
+                    const willBeLocked = !group.isLocked;
+                    if (willBeLocked) {
+                        // Snapshot current keyword matches before setting isLocked,
+                        // so recalculateAllMatches uses keyword logic (not the locked state)
+                        const matchesMap = recalculateAllMatches();
+                        const matchedIds = [];
+                        Object.values(matchesMap).forEach(p => {
+                            if (p.groupIndices.includes(index)) {
+                                matchedIds.push(p.id);
+                            }
+                        });
+                        group.lockedPluginIds = matchedIds;
+                    } else {
+                        group.lockedPluginIds = [];
+                    }
+                    group.isLocked = willBeLocked;
+                    await this.plugin.saveSettings();
+                    this.display();
+                });
+            });
 
             headerSetting.addExtraButton(b => {
                 b.setIcon('pencil')
                     .setTooltip('Manage matched plugins')
                     .onClick(() => {
-                        new GroupConfigModal(this.app, this.plugin, index).open();
+                        new GroupConfigModal(this.app, this.plugin, index, () => {
+                            this.display();
+                        }).open();
                     });
             });
 
-            headerSetting.addExtraButton(b => {
-                b.setIcon('arrow-up')
-                    .setTooltip('Move group up')
-                    .setDisabled(index === 0)
-                    .onClick(async () => {
-                        if (index > 0) {
-                            const temp = this.plugin.settings.groups[index - 1];
-                            this.plugin.settings.groups[index - 1] = this.plugin.settings.groups[index];
-                            this.plugin.settings.groups[index] = temp;
-                            await this.plugin.saveSettings();
-                            this.display();
-                        }
-                    });
-                if (index === 0) b.extraSettingsEl.classList.add('my-org-group-arrow-disabled');
-            });
 
-            headerSetting.addExtraButton(b => {
-                b.setIcon('arrow-down')
-                    .setTooltip('Move group down')
-                    .setDisabled(index === this.plugin.settings.groups.length - 1)
-                    .onClick(async () => {
-                        if (index < this.plugin.settings.groups.length - 1) {
-                            const temp = this.plugin.settings.groups[index + 1];
-                            this.plugin.settings.groups[index + 1] = this.plugin.settings.groups[index];
-                            this.plugin.settings.groups[index] = temp;
-                            await this.plugin.saveSettings();
-                            this.display();
-                        }
-                    });
-                if (index === this.plugin.settings.groups.length - 1) b.extraSettingsEl.classList.add('my-org-group-arrow-disabled');
-            });
 
             headerSetting.addExtraButton(b => b.setIcon('trash').setTooltip('Delete group').onClick(async () => {
                 const deleteAction = async () => {
                     this.plugin.settings.groups.splice(index, 1);
-                    delete this.plugin.settings.collapsedGroups[group.title];
+
+                    const newCollapsedGroups = {};
+                    const newCollapsedSettingGroups = {};
+
+                    if (this.plugin.settings.collapsedGroups['Ungrouped'] !== undefined) {
+                        newCollapsedGroups['Ungrouped'] = this.plugin.settings.collapsedGroups['Ungrouped'];
+                    }
+                    this.plugin.settings.groups.forEach((g, i) => {
+                        let oldIndex = i >= index ? i + 1 : i;
+                        if (this.plugin.settings.collapsedGroups[oldIndex] !== undefined) {
+                            newCollapsedGroups[i] = this.plugin.settings.collapsedGroups[oldIndex];
+                        }
+                        if (this.plugin.settings.collapsedSettingGroups[oldIndex] !== undefined) {
+                            newCollapsedSettingGroups[i] = this.plugin.settings.collapsedSettingGroups[oldIndex];
+                        }
+                    });
+                    this.plugin.settings.collapsedGroups = newCollapsedGroups;
+                    this.plugin.settings.collapsedSettingGroups = newCollapsedSettingGroups;
+
                     await this.plugin.saveSettings();
 
-                    // Activate 15-second grace period
                     this.plugin.deleteGracePeriod = true;
                     if (this.plugin.gracePeriodTimer) clearTimeout(this.plugin.gracePeriodTimer);
                     this.plugin.gracePeriodTimer = setTimeout(() => {
@@ -1282,7 +1954,6 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     this.display();
                 };
 
-                // If within the 15-second grace period, delete immediately; otherwise, show confirmation modal.
                 if (this.plugin.deleteGracePeriod) {
                     await deleteAction();
                 } else {
@@ -1290,169 +1961,122 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 }
             }));
 
-            new obsidian.Setting(div).setName('Title').addText(t => {
-                t.setValue(group.title).onChange(async v => {
-                    const oldState = this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
-                    delete this.plugin.settings.collapsedGroups[this.plugin.settings.groups[index].title];
-                    if (oldState !== undefined) this.plugin.settings.collapsedGroups[v] = oldState;
+            const contentDiv = div.createDiv();
+            if (isCollapsed) contentDiv.style.display = 'none';
 
+            new obsidian.Setting(contentDiv).setName('Title').addText(t => {
+                t.setValue(group.title).onChange(async v => {
                     this.plugin.settings.groups[index].title = v;
                     await this.plugin.saveSettings();
                 });
 
-                // Use Tab key for navigation to skip navigation buttons on the right
                 t.inputEl.addEventListener('keydown', (e) => {
                     if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault(); // Prevent default browser behavior
-                        const textarea = div.querySelector('.my-org-keywords-input');
+                        e.preventDefault();
+                        const textarea = contentDiv.querySelector('.my-org-keywords-input');
                         if (textarea) textarea.focus();
                     }
                 });
             });
 
-            const kwSetting = new obsidian.Setting(div).setName('Keywords');
+            const kwSetting = new obsidian.Setting(contentDiv).setName('Keywords');
 
-            // Create Badge
+            kwSetting.addExtraButton(b => {
+                b.setIcon('plus-circle').setTooltip('Add plugin').onClick(() => {
+                    const currentMatches = badge.tooltipDataObject || [];
+                    const matchedPluginIds = currentMatches.map(p => p.id);
+                    new AddPluginByKeywordModal(this.app, this.plugin, group.title, matchedPluginIds, async (pluginItem) => {
+                        let updatedText = this.plugin.settings.groups[index].keywords || '';
+                        if (updatedText.trim().length > 0) {
+                            updatedText += `, ${pluginItem.name}`;
+                        } else {
+                            updatedText = pluginItem.name;
+                        }
+                        this.plugin.settings.groups[index].keywords = updatedText;
+
+                        if (this.plugin.settings.groups[index].isLocked) {
+                            if (!this.plugin.settings.groups[index].lockedPluginIds) {
+                                this.plugin.settings.groups[index].lockedPluginIds = [];
+                            }
+                            if (!this.plugin.settings.groups[index].lockedPluginIds.includes(pluginItem.id)) {
+                                this.plugin.settings.groups[index].lockedPluginIds.push(pluginItem.id);
+                            }
+                        }
+
+                        const textarea = contentDiv.querySelector('.my-org-keywords-input');
+                        if (textarea) textarea.value = updatedText;
+
+                        const newMatchesMap = recalculateAllMatches();
+                        badgeUpdaters.forEach(updater => updater(newMatchesMap));
+                        await this.plugin.saveSettings();
+                        this.plugin.checkAndApply();
+                    }).open();
+                });
+                b.extraSettingsEl.classList.add('my-org-large-add-btn');
+            });
+
             const badge = kwSetting.nameEl.createSpan({ cls: 'my-org-match-badge' });
-
-            badge.addEventListener('mouseenter', () => {
-                if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
-                const tooltipData = badge.tooltipDataObject;
-                if (!tooltipData) return;
-
-                const tooltipEl = document.createElement('div');
-                tooltipEl.className = 'my-org-custom-tooltip';
-
-                tooltipEl.createDiv({ cls: 'my-org-modal-help-text', text: "Use commas to separate words or full phrases." });
-
-                if (tooltipData.length === 0) {
-                    tooltipEl.createDiv({ cls: 'my-org-tt-line', text: 'No plugins match these keywords.' });
-                } else {
-                    const uiPlugins = [];
-                    const noUiPlugins = [];
-
-                    // Instant evaluation of enabled states
-                    tooltipData.forEach(item => {
-                        const isEnabled = this.plugin.app.plugins.enabledPlugins.has(item.id);
-                        const processedItem = { ...item, isEnabled: isEnabled };
-
-                        if (processedItem.hasUI) uiPlugins.push(processedItem);
-                        else noUiPlugins.push(processedItem);
-                    });
-
-                    // Independent numeration for sections
-                    const renderSection = (title, list) => {
-                        if (list.length === 0) return;
-                        tooltipEl.createDiv({ cls: 'my-org-tt-header', text: title });
-
-                        list.forEach((item, displayIndex) => {
-                            const lineCls = item.isEnabled ? 'my-org-tt-line' : 'my-org-tt-line is-disabled';
-                            const lineEl = tooltipEl.createDiv({ cls: lineCls });
-
-                            const counter = displayIndex + 1;
-                            const space = counter < 10 ? '\u00A0' : '';
-                            lineEl.createSpan({ text: `${space}${counter}. ` });
-
-                            lineEl.createSpan({ cls: 'my-org-tt-identifier', text: item.manifestName });
-
-                            if (item.uiName) {
-                                lineEl.createSpan({ cls: 'my-org-tt-muted', text: ' (sidebar: ' });
-                                lineEl.createSpan({ cls: 'my-org-tt-white', text: item.uiName });
-                                lineEl.createSpan({ cls: 'my-org-tt-muted', text: ')' });
-                            }
-
-                            if (item.otherGroups.length > 0) {
-                                lineEl.createSpan({ cls: 'my-org-tt-others', text: ` (also in: ${item.otherGroups.join(', ')})` });
-                            }
-
-                            if (!item.isEnabled) {
-                                lineEl.createSpan({ cls: 'my-org-tt-status', text: ' (disabled)' });
-                            }
-                        });
-                    };
-
-                    renderSection('Plugins with a settings menu', uiPlugins);
-                    renderSection('Plugins without a settings menu', noUiPlugins);
-                }
-
-                document.body.appendChild(tooltipEl);
-                this.plugin.activeTooltip = tooltipEl;
-
-                const badgeRect = badge.getBoundingClientRect();
-                const tooltipRect = tooltipEl.getBoundingClientRect();
-                tooltipEl.style.left = `${badgeRect.left + (badgeRect.width / 2) - (tooltipRect.width / 2)}px`;
-                tooltipEl.style.top = `${badgeRect.top - tooltipRect.height - 8}px`;
-            });
-
-            badge.addEventListener('mouseleave', () => {
-                if (this.plugin.activeTooltip) {
-                    this.plugin.activeTooltip.remove();
-                    this.plugin.activeTooltip = null;
-                }
-            });
+            this.bindBadgeHoverLogic(badge);
 
             const updateBadge = (currentMatchesMap) => {
-                const matchedKeys = Object.keys(currentMatchesMap).filter(id =>
-                    currentMatchesMap[id].groupIndices.includes(index) // Match by exact group index, not title
-                );
-
-                // Info icon restored
-                badge.innerText = `${matchedKeys.length} matches ⓘ`;
-
-                if (matchedKeys.length > 0) {
-                    const savedOrder = group.items ? group.items.map(i => i.id || i.name) : [];
-
-                    matchedKeys.sort((a, b) => {
-                        const nameA = currentMatchesMap[a].manifestName;
-                        const nameB = currentMatchesMap[b].manifestName;
-
-                        let indexA = savedOrder.indexOf(a);
-                        if (indexA === -1) indexA = savedOrder.indexOf(nameA);
-
-                        let indexB = savedOrder.indexOf(b);
-                        if (indexB === -1) indexB = savedOrder.indexOf(nameB);
-
-                        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                        if (indexA !== -1) return -1;
-                        if (indexB !== -1) return 1;
-
-                        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
-                    });
-                }
-
-                badge.tooltipDataObject = matchedKeys.map((id) => {
-                    const matchData = currentMatchesMap[id];
-                    return {
-                        id: id,
-                        manifestName: matchData.manifestName,
-                        uiName: matchData.uiName !== matchData.manifestName ? matchData.uiName : null,
-                        otherGroups: matchData.groups.filter((t, i) => matchData.groupIndices[i] !== index), // Exclude the current group by index
-                        hasUI: matchData.hasUI // Inherit robust API verification
-                    };
+                const groupMatches = [];
+                Object.values(currentMatchesMap).forEach(p => {
+                    const matchData = p.groupsMap && p.groupsMap[index];
+                    if (matchData && matchData.posMatch && !matchData.isExcluded) {
+                        groupMatches.push({
+                            id: p.id,
+                            manifestName: p.manifestName,
+                            uiName: p.uiName !== p.manifestName ? p.uiName : null,
+                            hasUI: p.hasUI,
+                            otherGroups: p.groups.filter((t, i) => p.groupIndices[i] !== index),
+                            matchData: matchData
+                        });
+                    }
                 });
+
+                const savedOrder = group.items ? group.items.map(i => i.id || i.name) : [];
+
+                groupMatches.sort((a, b) => {
+                    const nameA = a.manifestName;
+                    const nameB = b.manifestName;
+
+                    let indexA = savedOrder.indexOf(a.id);
+                    if (indexA === -1) indexA = savedOrder.indexOf(nameA);
+
+                    let indexB = savedOrder.indexOf(b.id);
+                    if (indexB === -1) indexB = savedOrder.indexOf(nameB);
+
+                    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                    if (indexA !== -1) return -1;
+                    if (indexB !== -1) return 1;
+
+                    return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+                });
+
+                badge.tooltipDataObject = groupMatches;
+                const activeCount = groupMatches.length;
+                badge.innerText = `${activeCount} matches ⓘ`;
+
+                if (headerBadge) {
+                    headerBadge.tooltipDataObject = groupMatches;
+                    headerBadge.innerText = `${activeCount} matches ⓘ`;
+                }
             };
 
-            // Store the updater function so we can call it when ANY keyword box changes
             badgeUpdaters.push(updateBadge);
 
             kwSetting.addTextArea(t => {
                 t.inputEl.classList.add('my-org-keywords-input');
                 t.setValue(group.keywords).onChange(async v => {
                     this.plugin.settings.groups[index].keywords = v;
-
-                    // 1. Recalculate overlaps globally
                     const newMatchesMap = recalculateAllMatches();
-
-                    // 2. Tell all badges to update themselves in-place
                     badgeUpdaters.forEach(update => update(newMatchesMap));
-
-                    // 3. Save quietly. NO this.display() here!
                     await this.plugin.saveSettings(true);
                 });
             });
         });
 
-        // Render the initial states for all badges on page load
+        // Renders the initial states for all badges on page load
         const initialMatchesMap = recalculateAllMatches();
         badgeUpdaters.forEach(update => update(initialMatchesMap));
 
@@ -1464,12 +2088,12 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             await this.plugin.saveSettings();
             this.display();
 
-            // Automatically set cursor to the title of the newly added group
+            // Automatically sets cursor to the title of the newly added group
             const titleInputs = containerEl.querySelectorAll('.my-org-group-card input[type="text"]');
             if (titleInputs.length > 0) {
                 const lastInput = titleInputs[titleInputs.length - 1];
                 lastInput.focus();
-                lastInput.select(); // Selects "New Folder" to overwrite it immediately
+                lastInput.select();
             }
         };
     }
@@ -1510,10 +2134,123 @@ class DeleteConfirmModal extends obsidian.Modal {
     }
 }
 
+class AddPluginByKeywordModal extends obsidian.Modal {
+    constructor(app, plugin, groupTitle, matchedPluginIds, onAdd) {
+        super(app);
+        this.plugin = plugin;
+        this.groupTitle = groupTitle;
+        this.matchedPluginIds = matchedPluginIds;
+        this.onAdd = onAdd;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl('h2', { text: `Add plugin to ${this.groupTitle}` });
+
+        const allPlugins = [];
+        const installedIds = Object.keys(this.app.plugins.manifests);
+
+        installedIds.forEach(id => {
+            if (this.matchedPluginIds.includes(id)) return;
+
+            const manifestName = this.app.plugins.manifests[id].name;
+
+            const globalAlias = this.plugin.getGlobalAlias(id);
+
+            let hasUI = false;
+            if (this.app.setting.pluginTabs.some(tab => tab.id === id)) {
+                hasUI = true;
+            } else if (this.plugin.settings.knownPluginTabs[id]) {
+                hasUI = true;
+            }
+
+            allPlugins.push({
+                id: id,
+                name: manifestName,
+                alias: globalAlias,
+                hasUI: hasUI
+            });
+        });
+
+        const uiPlugins = allPlugins.filter(p => p.hasUI).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        const noUiPlugins = allPlugins.filter(p => !p.hasUI).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+        this.listContainer = contentEl.createDiv({ cls: 'my-org-modal-list' });
+
+        const renderList = (title, items) => {
+            if (items.length === 0) return;
+
+            if (title === 'Plugins without a settings menu' && uiPlugins.length > 0) {
+                this.listContainer.createEl('hr', { cls: 'my-org-modal-divider' });
+            }
+
+            const headerRow = this.listContainer.createDiv({ cls: 'my-org-toolbar-row' });
+            const leftDiv = headerRow.createDiv({ cls: 'my-org-toolbar-left' });
+            leftDiv.createDiv({ cls: 'my-org-tt-header-title', text: `${title} (${items.length})` });
+
+            items.forEach((item, index) => {
+                const row = this.listContainer.createDiv({ cls: 'my-org-modal-item' });
+
+                const infoDiv = row.createDiv({ cls: 'my-org-add-plugin-info' });
+
+                infoDiv.createSpan({ cls: 'my-org-add-plugin-name', text: item.name });
+
+                infoDiv.createSpan({ cls: 'my-org-add-plugin-separator', text: '|' });
+
+                if (item.alias) {
+                    infoDiv.createSpan({ cls: 'my-org-tt-muted', text: `"${item.alias}"` });
+                }
+
+                const cleanNoteText = this.plugin.getCleanNote(item.id);
+                const noteBtn = infoDiv.createDiv({ cls: `my-org-modal-btn my-org-note-btn ${cleanNoteText ? 'has-note' : ''}` });
+                obsidian.setIcon(noteBtn, 'file-text');
+
+                this.plugin.addCustomTooltip(noteBtn, () => {
+                    const text = this.plugin.getCleanNote(item.id);
+                    if (text) return text;
+                    const fallback = document.createElement('div');
+                    fallback.className = 'my-org-note-fallback';
+                    fallback.innerText = "Click to add note";
+                    return fallback;
+                }, { position: 'top', extraClass: 'my-org-note-tooltip', alwaysShow: true });
+
+                noteBtn.onclick = () => {
+                    new PluginNoteModal(this.app, item, this.plugin, () => {
+                        this.onOpen();
+                    }).open();
+                };
+
+                const ctrls = row.createDiv({ cls: 'my-org-modal-controls' });
+
+                const addBtn = ctrls.createDiv({ cls: 'clickable-icon' });
+                obsidian.setIcon(addBtn, 'plus-circle');
+                this.plugin.addCustomTooltip(addBtn, "Add to keywords", { position: 'top' });
+
+                addBtn.onclick = () => {
+                    row.remove();
+                    this.onAdd(item);
+                };
+            });
+        };
+
+        if (allPlugins.length === 0) {
+            this.listContainer.createDiv({ text: 'All installed plugins are already assigned to this group.', cls: 'my-org-modal-empty' });
+        } else {
+            renderList('Plugins with a settings menu', uiPlugins);
+            renderList('Plugins without a settings menu', noUiPlugins);
+        }
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
 class PluginNoteModal extends obsidian.Modal {
     constructor(app, pluginData, pluginInstance, onSave) {
         super(app);
-        this.pluginData = pluginData; // Object containing {id, name}
+        this.pluginData = pluginData;
         this.pluginInstance = pluginInstance;
         this.onSave = onSave;
     }
@@ -1524,9 +2261,15 @@ class PluginNoteModal extends obsidian.Modal {
         contentEl.createEl('h2', { text: `Notes: ${this.pluginData.name}` });
 
         const textArea = contentEl.createEl('textarea', { cls: 'my-org-note-textarea' });
-        textArea.placeholder = "Write your thoughts about this plugin here...";
-        // Load existing note if present
-        textArea.value = this.pluginInstance.settings.pluginNotes[this.pluginData.id] || '';
+        textArea.placeholder = "Write your thoughts about this plugin...";
+        const rawNote = this.pluginInstance.settings.pluginNotes[this.pluginData.id] || '';
+        this.htmlComments = [];
+        const cleanNote = rawNote.replace(/<!--[\s\S]*?-->/g, (match) => {
+            this.htmlComments.push(match);
+            return '';
+        }).trim();
+
+        textArea.value = cleanNote;
 
         const actions = contentEl.createDiv({ cls: 'my-org-modal-actions' });
 
@@ -1544,7 +2287,11 @@ class PluginNoteModal extends obsidian.Modal {
 
         const saveBtn = actions.createEl('button', { text: 'Save note', cls: 'mod-cta' });
         saveBtn.onclick = async () => {
-            const note = textArea.value.trim();
+            let note = textArea.value.trim();
+            if (this.htmlComments && this.htmlComments.length > 0) {
+                note = this.htmlComments.join('\n') + '\n\n' + note;
+                note = note.trim();
+            }
             if (!this.pluginInstance.settings.noteTimestamps) {
                 this.pluginInstance.settings.noteTimestamps = {};
             }
@@ -1552,17 +2299,171 @@ class PluginNoteModal extends obsidian.Modal {
                 this.pluginInstance.settings.pluginNotes[this.pluginData.id] = note;
                 this.pluginInstance.settings.noteTimestamps[this.pluginData.id] = Date.now();
             } else {
-                delete this.pluginInstance.settings.pluginNotes[this.pluginData.id]; // Cleanup if empty
+                delete this.pluginInstance.settings.pluginNotes[this.pluginData.id];
                 delete this.pluginInstance.settings.noteTimestamps[this.pluginData.id];
             }
-            await this.pluginInstance.saveSettings(false); // Save quietly
-            await this.pluginInstance.saveNotesToFile(); // Sync to file
-            this.onSave(); // Trigger UI refresh in the list
+            await this.pluginInstance.saveSettings(false);
+            await this.pluginInstance.saveNotesToFile();
+            this.onSave();
             this.close();
         };
     }
 
     onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class BulkAppendModal extends obsidian.Modal {
+    constructor(app, plugin, onResolve) {
+        super(app);
+        this.plugin = plugin;
+        this.onResolve = onResolve;
+        this.pluginList = [];
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('my-org-bulk-modal');
+
+        contentEl.createEl('h2', { text: 'Create notes for existing plugins', cls: 'my-org-modal-title' });
+        contentEl.createEl('p', {
+            text: 'Automatic note creation enabled. You can also generate notes for installed plugins here (only plugins without a note are shown).',
+            cls: 'my-org-modal-help-text'
+        });
+
+        const listContainer = contentEl.createDiv({ cls: 'my-org-bulk-list' });
+
+        const validManifests = Object.values(this.app.plugins.manifests).filter(manifest => {
+            if (!manifest.description) return false;
+            const currentNote = this.plugin.settings.pluginNotes[manifest.id] || "";
+            if (currentNote.includes(manifest.description)) return false;
+            return true;
+        });
+
+        validManifests.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+        const uiPlugins = validManifests.filter(m => {
+            const isEnabled = this.app.plugins.enabledPlugins.has(m.id);
+            if (isEnabled) return this.app.setting.pluginTabs.some(t => t.id === m.id);
+            return this.plugin.settings.knownPluginTabs[m.id] || false;
+        });
+        const noUiPlugins = validManifests.filter(m => {
+            const isEnabled = this.app.plugins.enabledPlugins.has(m.id);
+            if (isEnabled) return !this.app.setting.pluginTabs.some(t => t.id === m.id);
+            return !(this.plugin.settings.knownPluginTabs[m.id] || false);
+        });
+
+        let acceptBtn;
+        let cancelBtn;
+        const updateAcceptBtn = () => {
+            const selected = this.pluginList.filter(p => p.checkbox.checked);
+            if (acceptBtn) {
+                acceptBtn.innerText = selected.length > 0 ? 'Apply to selected' : 'I don\'t want to';
+            }
+            if (cancelBtn) {
+                cancelBtn.style.display = selected.length > 0 ? '' : 'none';
+            }
+        };
+
+        let masterCheckbox;
+        if (validManifests.length > 0) {
+            const masterContainer = listContainer.createDiv({ cls: 'my-org-bulk-item my-org-bulk-item-master' });
+            const masterLabel = masterContainer.createEl('label', { cls: 'my-org-bulk-label' });
+            masterCheckbox = masterLabel.createEl('input', { type: 'checkbox' });
+            masterCheckbox.checked = false;
+            masterLabel.createEl('span', { text: 'Select all', cls: 'my-org-bulk-name my-org-bulk-select-all' });
+
+            masterCheckbox.onchange = () => {
+                const checked = masterCheckbox.checked;
+                this.pluginList.forEach(p => {
+                    p.checkbox.checked = checked;
+                });
+                updateAcceptBtn();
+            };
+        }
+
+        const renderSection = (title, manifests) => {
+            if (manifests.length === 0) return;
+
+            if (title === 'Plugins without a settings menu' && uiPlugins.length > 0) {
+                listContainer.createEl('hr', { cls: 'my-org-modal-divider' });
+            }
+
+            const headerRow = listContainer.createDiv({ cls: 'my-org-toolbar-row my-org-bulk-section-header' });
+            const leftDiv = headerRow.createDiv({ cls: 'my-org-toolbar-left' });
+            leftDiv.createDiv({ cls: 'my-org-tt-header-title', text: `${title} (${manifests.length})` });
+
+            manifests.forEach(manifest => {
+                const itemDiv = listContainer.createDiv({ cls: 'my-org-bulk-item' });
+
+                const labelEl = itemDiv.createEl('label', { cls: 'my-org-bulk-label' });
+                const checkbox = labelEl.createEl('input', { type: 'checkbox' });
+                checkbox.checked = false;
+
+                checkbox.onchange = () => {
+                    if (masterCheckbox) {
+                        masterCheckbox.checked = this.pluginList.length > 0 && this.pluginList.every(p => p.checkbox.checked);
+                    }
+                    updateAcceptBtn();
+                };
+
+                labelEl.createEl('span', { text: manifest.name, cls: 'my-org-bulk-name' });
+
+                this.pluginList.push({
+                    id: manifest.id,
+                    manifest: manifest,
+                    checkbox: checkbox
+                });
+            });
+        };
+
+        renderSection('Plugins with a settings menu', uiPlugins);
+        renderSection('Plugins without a settings menu', noUiPlugins);
+
+        if (this.pluginList.length === 0) {
+            listContainer.createDiv({ text: 'All plugins already have their descriptions appended or lack descriptions.', cls: 'my-org-note-fallback my-org-bulk-empty' });
+        }
+
+        const actions = contentEl.createDiv({ cls: 'my-org-bulk-actions' });
+
+        cancelBtn = actions.createEl('button', { text: 'Dismiss' });
+        cancelBtn.onclick = () => {
+            const resolve = this.onResolve;
+            this.onResolve = null;
+            if (resolve) resolve(false);
+            this.close();
+        };
+
+        acceptBtn = actions.createEl('button', { text: 'Close', cls: 'mod-cta' });
+
+        acceptBtn.onclick = async () => {
+            const selected = this.pluginList.filter(p => p.checkbox.checked);
+            if (selected.length > 0) {
+                selected.forEach(p => {
+                    const currentNote = this.plugin.settings.pluginNotes[p.id] || "";
+                    this.plugin.settings.pluginNotes[p.id] = currentNote ? currentNote + '\n\n' + p.manifest.description : p.manifest.description;
+                    this.plugin.settings.noteTimestamps[p.id] = Date.now();
+                });
+                await this.plugin.saveNotesToFile();
+                new obsidian.Notice(`Added descriptions to ${selected.length} plugins.`);
+            }
+            const resolve = this.onResolve;
+            this.onResolve = null;
+            if (resolve) resolve(true);
+            this.close();
+        };
+
+        updateAcceptBtn();
+    }
+
+    onClose() {
+        if (this.onResolve) {
+            // Handles cases where modal is closed via ESC or clicking outside
+            this.onResolve(false);
+            this.onResolve = null;
+        }
         this.contentEl.empty();
     }
 }
