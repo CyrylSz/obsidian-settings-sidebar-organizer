@@ -2,7 +2,7 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-<div style="position:relative; width:100%; height:0px; padding-bottom:83.333%"><iframe allow="fullscreen;autoplay" allowfullscreen height="100%" src="https://streamable.com/e/ftyman?autoplay=1" width="100%" style="border:none; width:100%; height:100%; position:absolute; left:0px; top:0px; overflow:hidden;"></iframe></div>
+<video src="https://raw.githubusercontent.com/CyrylSz/obsidian-settings-sidebar-organizer/main/assets/showcase.mp4" autoplay muted loop controls width="100%"></video>
 
 ## 🗿 Why?
 
