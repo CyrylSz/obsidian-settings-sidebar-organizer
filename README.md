@@ -2,7 +2,7 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-<video src="assets/showcase.mp4" autoplay muted loop controls width="100%"></video>
+![Showcase](assets/showcase.mp4)
 
 ## 🗿 Why?
 
