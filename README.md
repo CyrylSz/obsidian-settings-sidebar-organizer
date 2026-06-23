@@ -2,7 +2,9 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-![Showcase](assets/showcase.mp4)
+
+https://github.com/user-attachments/assets/4b58aa90-8134-47de-9b36-bbcda0a48d24
+
 
 ## 🗿 Why?
 
