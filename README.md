@@ -2,7 +2,7 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-<video src="assets/showcase.webm" autoplay muted loop controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/CyrylSz/obsidian-settings-sidebar-organizer/main/assets/showcase.webm" autoplay muted loop controls width="100%"></video>
 
 ## 🗿 Why?
 
