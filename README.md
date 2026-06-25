@@ -2,9 +2,8 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-
+### 📺 Plugin Showcase / Walkthrough:
 https://github.com/user-attachments/assets/4b58aa90-8134-47de-9b36-bbcda0a48d24
-
 
 ## 🗿 Why?
 
@@ -23,24 +22,25 @@ Created because I had too many plugins and got lost in the sidebar; [feedback we
 ### 1. 📂 Grouping & Organization
 * **Custom Folders:** Create your own categories (e.g., "Design", "Automation").
 * **Multi-folder Support:** Plugins can belong to multiple groups at once.
-* **Keyword Matching:** Sorts plugins into groups based on keywords separated by commas (including spaces). Supports matching exact phrases using `keyword1, long keyword2` and manual exclusion with `!keyword1, !"long keyword2"`. Hover over a live-updating badge to see matches on the fly (showing multi-folder presence, if disabled, if hidden, and more).
+* **Keyword Matching:** Sorts plugins into groups based on keywords separated by commas (including spaces). Supports matching exact phrases using `keyword1, long keyword2` and manual exclusion with `!keyword1, !"long keyword2"` (removing them from the group). Hover over a live-updating badge to see matches on the fly (showing multi-folder presence, if disabled, if hidden, and more).
 * **Quick Add Keyword:** Open a selection modal next to the keyword box to quickly add installed plugins to it without typing.
-* **Manual Hide/Unhide:** Manually exclude/hide specific matched plugins from a group using the eye icon toggle in the group settings modal.
+* **Hide/Unhide:** Visually hide/unhide specific matched plugins from a group using the eye icon toggle (without removing them from the group).
 * **"Ungrouped" Folder:** Automatically catches any plugin that doesn't match your keywords so nothing gets lost (can be hidden).
-* **Group Lock Feature:** Freeze any group's matched plugins to prevent newly installed plugins from auto-matching, while still allowing the match count to decrease if a plugin is uninstalled.
+* **Group Lock:** Freeze any group's matched plugins to prevent newly installed plugins from auto-matching, while still allowing the match count to decrease if a plugin is uninstalled.
 
 ### 2. ✏️ Aliases & Order
-* **Renaming (Aliasing):** Rename plugins to save space or improve clarity. Aliases automatically synchronize globally for the same plugin.
-* **Sorting Options:** Sort your plugins/groups alphabetically, or use a custom pointer-based drag & drop system to manually order them exactly how you want them (dragging respects native scroll wheel sensitivity and supports proximity auto-scrolling).
+* **Aliasing:** Rename plugins to save space or improve clarity. Aliases automatically synchronize globally for the same plugin.
+* **Sorting Options:** Sort your plugins/groups alphabetically, or drag & drop them exactly how you want them (espects native scroll wheel sensitivity and supports proximity auto-scrolling).
 
 ### 3. 📝 Plugin Management & Notes
-* **Plugin Toggles:** Enable or disable your plugins directly from the group configuration menu. Use master switches to instantly toggle or hide/unhide all plugins in a group at once.
+* **Plugin Toggles:** Enable/disable your plugins directly from the group configuration menu. Use master switches to instantly toggle or hide/unhide all plugins in a group at once.
 * **Custom Notes:** Add personal notes to any plugin (e.g., why you disabled it or what it does). Hover over the note icon or the plugin in the sidebar to read it. Supports compatibility with other plugins (like Plugin Annotations) by hiding HTML comment wrappers in the UI.
-* **Single-File Interoperability:** Keep your notes in sync with a standalone `.md` file for easy bulk editing. Supports custom paths, even inside hidden system folders like `.obsidian/plugins/Notes.md`.
+* **Auto-add Notes:** Atomatically create notes with official plugin descriptions for newly installed plugins (if they don't have a note yet), along with a modal to generate notes for existing plugins (if you want to).
+* **One-File Note Sync:** Keep your notes in sync with a standalone `.md` file for easy bulk editing. Supports custom paths, even inside hidden system folders like `.obsidian/plugins/Notes.md`.
 
 ### 4. 📉 Compact & Clean UI
-* **Search Bar:** Quickly search and filter plugins in the sidebar by their aliases or original names (can be toggled in settings).
-* **Group Controls:** Easily collapse or expand group cards in the plugin settings menu to keep it tidy, with options to sort all groups alphabetically and a toggle to expand/collapse all groups at once (easier drag & drop).
+* **Search Bar:** Quickly search plugins in the sidebar by their aliases or original names (can be toggled in settings).
+* **Group Controls:** Collapse/expand group cards in the plugin settings menu to keep it tidy, with options to sort all groups alphabetically and a toggle to expand/collapse all groups at once (easier drag & drop).
 * **Compact Mode:** Hides the large "Core plugins" and "Community plugins" tabs. It moves them to small ⚙️ icons in the section headers to improve clarity.
 * **Collapsible Headers:** Allows you to fold the main "Options", "Core plugins", and "Community plugins" sections.
 * **Collapse by Default:** Option to automatically collapse all groups each time you reopen the settings menu (instead of saving exactly how you left them).
@@ -61,12 +61,6 @@ Created because I had too many plugins and got lost in the sidebar; [feedback we
 1. Download `main.js`, `styles.css`, and `manifest.json`.
 2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
 3. Paste files and reload Obsidian.
-
-### Method 4: BRAT
-1. Install **BRAT** from the Community Plugins store.
-2. Go to **Settings > BRAT > Add Beta plugin**.
-3. Paste this repo URL: `https://github.com/CyrylSz/obsidian-settings-sidebar-organizer`.
-4. Click **Add Plugin**.
 
 ## ⚙️ How to use
 Everything is configured via **Settings > Settings Sidebar Organizer**:
