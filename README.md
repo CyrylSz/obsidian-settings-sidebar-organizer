@@ -2,7 +2,7 @@
 
 **Tame your plugin list.** Group community plugins, rename them (alias), reorder them manually or automatically, add notes, compact the sidebar UI headers, and much more...
 
-### 📺 Plugin Showcase / Walkthrough:
+### 📺 Plugin Showcase/Walkthrough
 https://github.com/user-attachments/assets/4b58aa90-8134-47de-9b36-bbcda0a48d24
 
 ## 🗿 Why?
@@ -67,7 +67,7 @@ Everything is configured via **Settings > Settings Sidebar Organizer**:
 
 1.  **Create Group:** Click `+ Add Group`.
 2.  **Assign Plugins:** Type/Add keywords (comma-separated) in the "Keywords" box.
-3.  **Fine-tune:** Click the **Gear Icon (⚙️)** next to a group to:
+3.  **Fine-tune:** Click the **Pencil Icon (✏️)** next to a group to:
     * **Reorder** items manually via drag & drop or **Sort** them alphabetically.
     * **Toggle** plugins on/off or hide/unhide them.
     * Set an **Alias** (rename).
