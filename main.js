@@ -23,25 +23,17 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         await this.loadSettings();
         this.addSettingTab(new OrganizerSettingTab(this.app, this));
 
-        // Applies dynamic body class for collapsible headers CSS
-        document.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
-
         this.isOrganizing = false;
         this.observing = false;
-
-        this.observer = new MutationObserver((mutations) => {
-            if (this.isOrganizing) return;
-            const hasNodeChanges = mutations.some(m => m.type === 'childList');
-            if (hasNodeChanges) {
-                this.checkAndApply();
-            }
-        });
+        // Created lazily per settings-window open (see attachObserver) so it always lives in the
+        // realm of whichever document — main or popout — the sidebar currently renders into.
+        this.observer = null;
 
         this.app.workspace.onLayoutReady(async () => {
             await this.loadNotesFromFile();
-            this.restoreSectionStates();
-            // Starts a lightweight interval to check if the settings window is open, attaching the observer once opened
-            this.startSidebarWatcher();
+            // Obsidian 1.13 opens settings in a separate window with its own document, so the
+            // plugin hooks the settings modal's own lifecycle instead of watching the main window.
+            this.initSettingHook();
         });
 
         this.registerEvent(this.app.vault.on('modify', async (file) => {
@@ -50,26 +42,239 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 await this.loadNotesFromFile();
             }
         }));
+    }
 
-        this.registerDomEvent(document, 'click', (evt) => {
-            if (!document.querySelector('.modal-container')) return;
+    hideCustomTooltip() {
+        if (this.activeTooltip) {
+            this.activeTooltip.remove();
+            this.activeTooltip = null;
+        }
+    }
 
+    addCustomTooltip(element, contentBuilder, options = {}) {
+        const extraClass = options.extraClass || '';
+        const offset = options.offset || 8;
+
+        element.addEventListener('mouseenter', () => {
+            const position = (typeof options.position === 'function') ? options.position() : (options.position || 'top');
+            this.hideCustomTooltip();
+
+            // Anchors the tooltip to the element's own window so it renders correctly when
+            // settings is a separate popout window (Obsidian 1.13).
+            const doc = element.ownerDocument || document;
+            const win = doc.defaultView || window;
+
+            const tooltipEl = doc.createElement('div');
+            tooltipEl.className = `my-org-custom-tooltip ${extraClass}`.trim();
+
+            if (typeof contentBuilder === 'string') {
+                tooltipEl.innerText = contentBuilder;
+            } else if (typeof contentBuilder === 'function') {
+                const content = contentBuilder();
+                if (!content && !options.alwaysShow) return;
+                if (typeof content === 'string') tooltipEl.innerText = content;
+                // nodeType check instead of instanceof: the settings popout is a separate realm,
+                // so its elements are not instances of this realm's HTMLElement.
+                else if (content && content.nodeType === 1) tooltipEl.appendChild(content);
+            }
+
+            doc.body.appendChild(tooltipEl);
+            this.activeTooltip = tooltipEl;
+
+            const rect = element.getBoundingClientRect();
+            const tipRect = tooltipEl.getBoundingClientRect();
+
+            let left, top;
+            if (position === 'top') {
+                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+                top = rect.top - tipRect.height - offset;
+            } else if (position === 'bottom') {
+                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+                top = rect.bottom + offset;
+            } else if (position === 'right') {
+                left = rect.right + offset;
+                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
+            } else if (position === 'left') {
+                left = rect.left - tipRect.width - offset;
+                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
+            }
+
+            if (left + tipRect.width > win.innerWidth) left = rect.left - tipRect.width - offset;
+            if (top + tipRect.height > win.innerHeight) top = win.innerHeight - tipRect.height - offset;
+            if (left < 0) left = offset;
+            if (top < 0) top = offset;
+
+            tooltipEl.style.left = `${left}px`;
+            tooltipEl.style.top = `${top}px`;
+        });
+
+        element.addEventListener('mouseleave', () => this.hideCustomTooltip());
+        if (options.hideOnClick !== false) {
+            element.addEventListener('click', () => this.hideCustomTooltip());
+        }
+    }
+
+    // --- Settings-window awareness (Obsidian 1.13 popout settings) ---
+
+    // The document currently hosting the settings modal. In 1.13 this is the popout window's
+    // document by default; the main document when "Open settings in window" is off, on mobile,
+    // or when settings is closed. Derived from live element references on app.setting, which
+    // move with the modal into whichever window it renders into.
+    settingDoc() {
+        const setting = this.app.setting;
+        if (setting) {
+            const el = setting.tabHeadersEl || setting.modalEl || setting.containerEl || setting.contentEl;
+            if (el && el.ownerDocument) return el.ownerDocument;
+        }
+        return document;
+    }
+
+    isSettingOpen() {
+        const setting = this.app.setting;
+        const el = setting && (setting.modalEl || setting.containerEl);
+        return !!(el && el.isConnected);
+    }
+
+    // The settings sidebar container (the vertical tab header). Persists across open/close and
+    // lives in whichever document the settings modal currently renders into.
+    getSidebarEl() {
+        const setting = this.app.setting;
+        if (setting && setting.tabHeadersEl) return setting.tabHeadersEl;
+        return this.settingDoc().querySelector('.vertical-tab-header');
+    }
+
+    // Installs the settings-lifecycle hook, retrying briefly in case app.setting is not yet
+    // populated at layout-ready. Without this, a slow/edge startup would leave the plugin inert
+    // for the whole session (there is no fallback watcher anymore).
+    initSettingHook(attempt = 0) {
+        if (this.app.setting) {
+            this.patchSettingLifecycle();
+            if (this.isSettingOpen()) this.onSettingsOpened();
+            return;
+        }
+        if (attempt < 20) {
+            this._initTimer = window.setTimeout(() => this.initSettingHook(attempt + 1), 100);
+        }
+    }
+
+    // Wraps the settings modal's own open/close lifecycle. There is no public "settings opened"
+    // event in Obsidian, and the modal now lives in a separate window, so watching the main
+    // document is no longer viable. The wrappers are guarded by _settingPatched so they become
+    // pass-throughs after unload even if they can't be cleanly removed (see unpatch).
+    patchSettingLifecycle() {
+        const setting = this.app.setting;
+        if (!setting || this._settingPatched) return;
+        this._settingPatched = true;
+        this._origSettingOnOpen = setting.onOpen;
+        this._origSettingOnClose = setting.onClose;
+        const self = this;
+        this._onOpenWrapper = function (...args) {
+            const result = self._origSettingOnOpen.apply(this, args);
+            if (self._settingPatched) self.onSettingsOpened();
+            return result;
+        };
+        this._onCloseWrapper = function (...args) {
+            if (self._settingPatched) self.onSettingsClosed();
+            return self._origSettingOnClose.apply(this, args);
+        };
+        setting.onOpen = this._onOpenWrapper;
+        setting.onClose = this._onCloseWrapper;
+    }
+
+    unpatchSettingLifecycle() {
+        const setting = this.app.setting;
+        if (!setting || !this._settingPatched) return;
+        // Marks the wrappers inert first so any still-installed wrapper (if another plugin wrapped
+        // on top of ours) skips our logic and just passes through.
+        this._settingPatched = false;
+        // Only restore the original when our wrapper is still the outermost one; otherwise leave it
+        // in place (now a pass-through) rather than clobbering the other plugin's wrapper.
+        if (setting.onOpen === this._onOpenWrapper && this._origSettingOnOpen) {
+            setting.onOpen = this._origSettingOnOpen;
+            this._origSettingOnOpen = null;
+            this._onOpenWrapper = null;
+        }
+        if (setting.onClose === this._onCloseWrapper && this._origSettingOnClose) {
+            setting.onClose = this._origSettingOnClose;
+            this._origSettingOnClose = null;
+            this._onCloseWrapper = null;
+        }
+    }
+
+    // Creates a fresh MutationObserver in the sidebar's own window realm and attaches it. Rebuilt
+    // on every open so a missed close (e.g. the OS window's X) can't leave it bound to a destroyed
+    // popout, and so it observes nodes in the correct realm.
+    attachObserver(sidebar) {
+        if (this.observer) this.observer.disconnect();
+        const win = (sidebar.ownerDocument && sidebar.ownerDocument.defaultView) || window;
+        const MO = win.MutationObserver || MutationObserver;
+        this.observer = new MO((mutations) => {
+            if (this.isOrganizing) return;
+            if (mutations.some(m => m.type === 'childList')) this.checkAndApply();
+        });
+        this.observer.observe(sidebar, { childList: true, subtree: true });
+        this.observing = true;
+    }
+
+    onSettingsOpened() {
+        const doc = this.settingDoc();
+        // Scopes collapsible-header styling to the settings window body
+        doc.body.classList.toggle('my-org-collapse-enabled', this.settings.collapsibleHeaders);
+
+        // Always (re)attaches, recovering even if a previous close was missed
+        const sidebar = this.getSidebarEl();
+        if (sidebar) this.attachObserver(sidebar);
+
+        this.bindSettingWindowEvents(doc);
+        this.checkAndApply(); // Applies before the settings window paints
+    }
+
+    onSettingsClosed() {
+        if (this.observer) this.observer.disconnect();
+        this.observing = false;
+        this.unbindSettingWindowEvents();
+        this.hideCustomTooltip();
+
+        // Collapses groups when the settings modal closes
+        if (this.settings.startCollapsed) {
+            this.settings.collapsedGroups = {};
+            this.saveSettings(false);
+
+            // Strips the cached 'open' state from the detached HTML to prevent visual flashes
+            // when the user reopens the settings modal because Obsidian caches it in memory.
+            this.settingDoc().querySelectorAll('.my-org-folder').forEach(folder => {
+                folder.removeAttribute('open');
+            });
+        }
+    }
+
+    // Binds the click/scroll handlers to the settings window. The settings popout is a distinct
+    // window with its own document, so listeners on the main window never fire for it.
+    bindSettingWindowEvents(doc) {
+        if (this._settingEventsDoc === doc) return; // already bound to this window
+        this.unbindSettingWindowEvents();
+        const win = doc.defaultView || window;
+        this._settingEventsDoc = doc;
+        this._settingEventsWin = win;
+
+        this._onSettingClick = (evt) => {
             if (this.activeTooltip && this.activeTooltip.classList.contains('my-org-sidebar-note-tooltip')) {
                 this.activeTooltip.remove();
                 this.activeTooltip = null;
             }
 
-            // Removes active states on the proxies when user clicks a native sidebar item or custom gear icons
-            if (evt.isTrusted && evt.target instanceof Element) {
+            // Removes active states on the proxies when the user clicks a native sidebar item or custom gear icon
+            // (nodeType instead of instanceof: the settings popout is a separate realm in 1.13)
+            if (evt.isTrusted && evt.target && evt.target.nodeType === 1) {
                 const clickedTab = evt.target.closest('.vertical-tab-nav-item');
                 const clickedGear = evt.target.closest('.my-org-section-btn');
                 if ((clickedTab && !clickedTab.classList.contains('my-org-proxy')) || clickedGear) {
-                    document.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
+                    doc.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
                 }
             }
 
-            // Catches the global click and waits for Obsidian to finish rebuilding the DOM
-            if (evt.target instanceof Element && (evt.target.closest('.checkbox-container') || evt.target.closest('button'))) {
+            // Catches the click and waits for Obsidian to finish rebuilding the sidebar
+            if (evt.target && evt.target.nodeType === 1 && (evt.target.closest('.checkbox-container') || evt.target.closest('button'))) {
                 if (evt.target.closest('.my-org-wide-modal')) return; // Ignores clicks inside the custom modal to prevent sidebar flickering
                 if (this.clickTimer) clearTimeout(this.clickTimer);
                 this.clickTimer = setTimeout(() => this.checkAndApply(), 150);
@@ -99,141 +304,30 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                     evt.stopPropagation();
                 }
             }
-        });
+        };
 
-        // Listens to all scroll actions in the capture phase to clear floating tooltips
-        this.registerDomEvent(window, 'scroll', (evt) => {
-            if (!document.querySelector('.modal-container')) return;
+        this._onSettingScroll = () => {
             if (this.activeTooltip) {
                 this.activeTooltip.remove();
                 this.activeTooltip = null;
             }
-        }, { capture: true });
+        };
+
+        doc.addEventListener('click', this._onSettingClick);
+        win.addEventListener('scroll', this._onSettingScroll, { capture: true });
     }
 
-    hideCustomTooltip() {
-        if (this.activeTooltip) {
-            this.activeTooltip.remove();
-            this.activeTooltip = null;
+    unbindSettingWindowEvents() {
+        if (this._settingEventsDoc && this._onSettingClick) {
+            this._settingEventsDoc.removeEventListener('click', this._onSettingClick);
         }
-    }
-
-    addCustomTooltip(element, contentBuilder, options = {}) {
-        const extraClass = options.extraClass || '';
-        const offset = options.offset || 8;
-
-        element.addEventListener('mouseenter', () => {
-            const position = (typeof options.position === 'function') ? options.position() : (options.position || 'top');
-            this.hideCustomTooltip();
-
-            const tooltipEl = document.createElement('div');
-            tooltipEl.className = `my-org-custom-tooltip ${extraClass}`.trim();
-
-            if (typeof contentBuilder === 'string') {
-                tooltipEl.innerText = contentBuilder;
-            } else if (typeof contentBuilder === 'function') {
-                const content = contentBuilder();
-                if (!content && !options.alwaysShow) return;
-                if (typeof content === 'string') tooltipEl.innerText = content;
-                else if (content instanceof HTMLElement) tooltipEl.appendChild(content);
-            }
-
-            document.body.appendChild(tooltipEl);
-            this.activeTooltip = tooltipEl;
-
-            const rect = element.getBoundingClientRect();
-            const tipRect = tooltipEl.getBoundingClientRect();
-
-            let left, top;
-            if (position === 'top') {
-                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
-                top = rect.top - tipRect.height - offset;
-            } else if (position === 'bottom') {
-                left = rect.left + (rect.width / 2) - (tipRect.width / 2);
-                top = rect.bottom + offset;
-            } else if (position === 'right') {
-                left = rect.right + offset;
-                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
-            } else if (position === 'left') {
-                left = rect.left - tipRect.width - offset;
-                top = rect.top + (rect.height / 2) - (tipRect.height / 2);
-            }
-
-            if (left + tipRect.width > window.innerWidth) left = rect.left - tipRect.width - offset;
-            if (top + tipRect.height > window.innerHeight) top = window.innerHeight - tipRect.height - offset;
-            if (left < 0) left = offset;
-            if (top < 0) top = offset;
-
-            tooltipEl.style.left = `${left}px`;
-            tooltipEl.style.top = `${top}px`;
-        });
-
-        element.addEventListener('mouseleave', () => this.hideCustomTooltip());
-        if (options.hideOnClick !== false) {
-            element.addEventListener('click', () => this.hideCustomTooltip());
+        if (this._settingEventsWin && this._onSettingScroll) {
+            this._settingEventsWin.removeEventListener('scroll', this._onSettingScroll, { capture: true });
         }
-    }
-
-    // Manages sidebar observation logic
-    startSidebarWatcher() {
-        // Uses an instant MutationObserver on the application body to detect DOM changes
-        this.bodyObserver = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
-
-                // Detects when the Settings window is opened (added to the Document Object Model)
-                mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1 && node.classList.contains('modal-container')) {
-                        const sidebar = node.querySelector('.vertical-tab-header');
-                        if (sidebar && !this.observing) {
-                            this.observing = true;
-                            this.observer.observe(sidebar, { childList: true, subtree: true });
-                            this.checkAndApply(); // Applies instantly before the screen paints
-                        }
-                    }
-                });
-
-                // Detects when the Settings window is closed (removed from the Document Object Model)
-                mutation.removedNodes.forEach(node => {
-                    if (node.nodeType === 1 && node.classList.contains('modal-container')) {
-
-                        if (this.activeTooltip) {
-                            this.activeTooltip.remove();
-                            this.activeTooltip = null;
-                        }
-
-                        if (node.querySelector('.vertical-tab-header-group-items')) {
-                            if (this.observing) {
-                                this.observer.disconnect();
-                                this.observing = false;
-                            }
-
-                            // Collapses groups when the settings modal closes
-                            if (this.settings.startCollapsed) {
-                                this.settings.collapsedGroups = {};
-                                this.saveSettings(false);
-
-                                // Strips the 'open' state from the detached HTML to prevent visual flashes
-                                // when the user reopens the settings modal because Obsidian caches it in memory.
-                                node.querySelectorAll('.my-org-folder').forEach(folder => {
-                                    folder.removeAttribute('open');
-                                });
-                            }
-                        }
-                    }
-                });
-            });
-        });
-
-        // Starts observing the main application body for the settings modal
-        this.bodyObserver.observe(document.body, { childList: true });
-
-        // Performs initial fallback check in case settings are already open when plugin loads
-        const sidebar = document.querySelector('.vertical-tab-header');
-        if (sidebar && !this.observing) {
-            this.observing = true;
-            this.observer.observe(sidebar, { childList: true, subtree: true });
-            this.checkAndApply();
-        }
+        this._onSettingClick = null;
+        this._onSettingScroll = null;
+        this._settingEventsDoc = null;
+        this._settingEventsWin = null;
     }
 
     getCleanNote(id) {
@@ -348,24 +442,43 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         }
     }
 
+    // Removes the injected folders and un-hides the native nav items, scoped to the given
+    // document. Shared by every path that rebuilds the sidebar so the reset stays in one place.
+    clearOrganizedDom(doc) {
+        doc.querySelectorAll('.my-org-folder').forEach(f => f.remove());
+        doc.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
+    }
+
     onunload() {
         if (this.observer) this.observer.disconnect();
-        if (this.bodyObserver) this.bodyObserver.disconnect();
+        this.observing = false;
+        this.unbindSettingWindowEvents();
+        this.unpatchSettingLifecycle();
         if (this.clickTimer) clearTimeout(this.clickTimer); // Clears pending timers
+        if (this._initTimer) clearTimeout(this._initTimer);
 
-        document.body.classList.remove('my-org-collapse-enabled');
+        // All injected sidebar DOM lives inside the settings modal element, which persists across
+        // open/close regardless of which document currently hosts it (a popout window may already
+        // be destroyed by now, so querying the document would miss nothing that matters).
+        const setting = this.app.setting;
+        const root = (setting && (setting.modalEl || setting.containerEl)) || this.settingDoc();
 
-        document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
-        document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
+        root.querySelectorAll('.my-org-folder').forEach(f => f.remove());
+        root.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
 
         // Targets only settings modal headers to prevent breaking Obsidian\'s native file explorer
-        document.querySelectorAll('.vertical-tab-header-group-title.is-collapsed, .vertical-tab-header-group-items.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
+        root.querySelectorAll('.vertical-tab-header-group-title.is-collapsed, .vertical-tab-header-group-items.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
 
-        document.querySelectorAll('.my-org-hide-nav').forEach(el => el.classList.remove('my-org-hide-nav'));
-        document.querySelectorAll('.my-org-section-btn').forEach(btn => btn.remove());
+        root.querySelectorAll('.my-org-hide-nav').forEach(el => el.classList.remove('my-org-hide-nav'));
+        root.querySelectorAll('.my-org-section-btn').forEach(btn => btn.remove());
 
-        // Cleans up floating tooltips
-        document.querySelectorAll('.my-org-custom-tooltip').forEach(t => t.remove());
+        // The collapse styling class may have been applied to either window's body over the session
+        this.settingDoc().body.classList.remove('my-org-collapse-enabled');
+        if (document.body) document.body.classList.remove('my-org-collapse-enabled');
+
+        // Cleans up any floating tooltip
+        this.hideCustomTooltip();
+        this.settingDoc().querySelectorAll('.my-org-custom-tooltip').forEach(t => t.remove());
     }
 
     async loadSettings() {
@@ -375,15 +488,16 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     async saveSettings(shouldReorganize = true) {
         await this.saveData(this.settings);
         if (shouldReorganize) {
-            document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
-            document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
+            this.clearOrganizedDom(this.settingDoc());
             this.checkAndApply();
         }
     }
 
     restoreSectionStates() {
         if (!this.settings.collapsibleHeaders) return;
-        const headers = document.querySelectorAll('.vertical-tab-header-group-title');
+        const sidebar = this.getSidebarEl();
+        if (!sidebar) return;
+        const headers = sidebar.querySelectorAll('.vertical-tab-header-group-title');
         headers.forEach(header => {
             const group = header.parentElement;
             const items = group.querySelector('.vertical-tab-header-group-items');
@@ -399,14 +513,15 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     }
 
     manageCompactMode() {
+        const doc = this.settingDoc();
         if (this.settings.compactMode) {
             // Searches by immutable setting IDs (language independent)
-            const coreNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="plugins"]');
-            const commNav = document.querySelector('.vertical-tab-nav-item[data-setting-id="community-plugins"]');
+            const coreNav = doc.querySelector('.vertical-tab-nav-item[data-setting-id="plugins"]');
+            const commNav = doc.querySelector('.vertical-tab-nav-item[data-setting-id="community-plugins"]');
             const targetNavItems = [coreNav, commNav].filter(Boolean);
 
-            const coreSection = document.querySelector('.vertical-tab-header-group-items[data-section="core-plugins"]');
-            const commSection = document.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
+            const coreSection = doc.querySelector('.vertical-tab-header-group-items[data-section="core-plugins"]');
+            const commSection = doc.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
 
             const targetHeaders = [];
             if (coreSection && coreSection.previousElementSibling) targetHeaders.push(coreSection.previousElementSibling);
@@ -419,7 +534,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             targetHeaders.forEach(header => {
                 if (header.querySelector('.my-org-section-btn')) return;
 
-                const btn = document.createElement('div');
+                const btn = doc.createElement('div');
                 btn.className = 'my-org-section-btn';
                 btn.setAttribute('aria-label', 'Manage plugins');
                 obsidian.setIcon(btn, 'settings');
@@ -429,7 +544,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                     e.preventDefault();
 
                     // Manually clears proxy active states because stopPropagation blocks the global listener
-                    document.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
+                    doc.querySelectorAll('.my-org-proxy.is-active').forEach(p => p.classList.remove('is-active'));
 
                     // Connects the gear icon with the hidden menu button
                     if (header === (coreSection && coreSection.previousElementSibling) && coreNav) {
@@ -441,13 +556,13 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
                 header.appendChild(btn);
             });
         } else {
-            document.querySelectorAll('.my-org-hide-nav').forEach(item => item.classList.remove('my-org-hide-nav'));
-            document.querySelectorAll('.my-org-section-btn').forEach(b => b.remove());
+            doc.querySelectorAll('.my-org-hide-nav').forEach(item => item.classList.remove('my-org-hide-nav'));
+            doc.querySelectorAll('.my-org-section-btn').forEach(b => b.remove());
         }
     }
 
     checkAndApply() {
-        const sidebar = document.querySelector('.vertical-tab-header-group-items');
+        const sidebar = this.settingDoc().querySelector('.vertical-tab-header-group-items');
         if (!sidebar) return;
 
         // Restores collapse if needed
@@ -462,6 +577,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     organizeSidebar() {
         // Sets flag to indicate internal DOM modification so the Observer ignores changes
         this.isOrganizing = true;
+
+        // Resolves the settings window's document up front so every element is created and queried
+        // in the window the settings modal currently renders into (a popout window in 1.13).
+        const doc = this.settingDoc();
 
         if (!this.app.plugins || !this.app.plugins.manifests) {
             this.isOrganizing = false;
@@ -509,10 +628,10 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             }
         }
 
-        let targetContainer = document.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
+        let targetContainer = doc.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
 
         if (!targetContainer) {
-            const firstCommunityPlugin = document.querySelector('.vertical-tab-nav-item[data-setting-id]');
+            const firstCommunityPlugin = doc.querySelector('.vertical-tab-nav-item[data-setting-id]');
             if (firstCommunityPlugin) {
                 targetContainer = firstCommunityPlugin.parentElement;
             }
@@ -530,7 +649,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         const pluginItems = Array.from(targetContainer.querySelectorAll('.vertical-tab-nav-item'));
 
         const groupsMap = this.settings.groups.map((g, idx) => {
-            const details = document.createElement('details');
+            const details = doc.createElement('details');
             details.className = 'my-org-folder';
             const savedState = this.settings.collapsedGroups[idx];
             const isOpen = savedState !== undefined ? savedState : !this.settings.startCollapsed;
@@ -553,7 +672,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             };
         });
 
-        const ungroupedDetails = document.createElement('details');
+        const ungroupedDetails = doc.createElement('details');
         ungroupedDetails.className = 'my-org-folder my-org-special';
         const savedUngroupedState = this.settings.collapsedGroups['Ungrouped'];
         ungroupedDetails.open = savedUngroupedState !== undefined ? savedUngroupedState : !this.settings.startCollapsed;
@@ -562,7 +681,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             this.settings.collapsedGroups['Ungrouped'] = ungroupedDetails.open;
             this.saveSettings(false);
         });
-        const ungroupedSummary = document.createElement('summary');
+        const ungroupedSummary = doc.createElement('summary');
         ungroupedSummary.className = 'my-org-summary';
         ungroupedSummary.innerText = 'Ungrouped';
         ungroupedDetails.appendChild(ungroupedSummary);
@@ -575,9 +694,9 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
         const insertFolders = (referenceNode) => {
             if (foldersInserted) return;
             if (this.settings.showSearchBar) {
-                const searchContainer = document.createElement('div');
+                const searchContainer = doc.createElement('div');
                 searchContainer.className = 'my-org-search-container';
-                const searchInput = document.createElement('input');
+                const searchInput = doc.createElement('input');
                 searchInput.type = 'search';
                 searchInput.placeholder = 'Search...';
                 searchInput.className = 'my-org-search-input';
@@ -739,7 +858,8 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
     }
 
     createProxy(displayName, settingId, originalItem, container) {
-        const proxy = document.createElement('div');
+        const doc = (container && container.ownerDocument) || this.settingDoc();
+        const proxy = doc.createElement('div');
         proxy.className = 'vertical-tab-nav-item my-org-proxy';
         proxy.innerText = displayName;
         proxy.setAttribute('data-setting-id', settingId);
@@ -1002,7 +1122,7 @@ class GroupConfigModal extends obsidian.Modal {
 
         // Prevents Obsidian's auto-focus from highlighting the sort select menu or inputs
         setTimeout(() => {
-            const active = document.activeElement;
+            const active = this.contentEl.ownerDocument.activeElement;
             if (active && (active.tagName === 'SELECT' || active.tagName === 'INPUT')) {
                 active.blur();
             }
@@ -1062,8 +1182,7 @@ class GroupConfigModal extends obsidian.Modal {
             this.close();
 
             // Refreshes the sidebar layout synchronously to prevent visual flashes
-            document.querySelectorAll('.my-org-folder').forEach(f => f.remove());
-            document.querySelectorAll('.my-org-hidden').forEach(h => h.classList.remove('my-org-hidden'));
+            this.plugin.clearOrganizedDom(this.plugin.settingDoc());
             this.plugin.checkAndApply();
 
             if (this.onSaveCallback) this.onSaveCallback();
@@ -1086,6 +1205,9 @@ class GroupConfigModal extends obsidian.Modal {
 
                 const dragHandle = ctrls.createDiv({ cls: 'my-org-modal-drag-handle' });
                 obsidian.setIcon(dragHandle, 'menu');
+
+                // Drag tracking must bind to the settings window (a popout in 1.13), not the main window
+                const dragWin = (dragHandle.ownerDocument && dragHandle.ownerDocument.defaultView) || window;
 
                 const onPointerMove = (pe) => {
                     parentContainer.querySelectorAll('.drop-target-above, .drop-target-below').forEach(el => {
@@ -1166,8 +1288,8 @@ class GroupConfigModal extends obsidian.Modal {
                     }
 
                     this.draggedIndex = null;
-                    window.removeEventListener('pointermove', onPointerMove);
-                    window.removeEventListener('pointerup', onPointerUp);
+                    dragWin.removeEventListener('pointermove', onPointerMove);
+                    dragWin.removeEventListener('pointerup', onPointerUp);
                 };
 
                 dragHandle.addEventListener('pointerdown', (pe) => {
@@ -1175,8 +1297,8 @@ class GroupConfigModal extends obsidian.Modal {
                     this.draggedIndex = index;
                     row.classList.add('is-dragging');
 
-                    window.addEventListener('pointermove', onPointerMove);
-                    window.addEventListener('pointerup', onPointerUp);
+                    dragWin.addEventListener('pointermove', onPointerMove);
+                    dragWin.addEventListener('pointerup', onPointerUp);
                 });
             }
 
@@ -1242,7 +1364,7 @@ class GroupConfigModal extends obsidian.Modal {
             this.plugin.addCustomTooltip(noteBtn, () => {
                 const text = this.plugin.getCleanNote(item.id);
                 if (text) return text;
-                const fallback = document.createElement('div');
+                const fallback = (noteBtn.ownerDocument || document).createElement('div');
                 fallback.className = 'my-org-note-fallback';
                 fallback.innerText = "Click to add note";
                 return fallback;
@@ -1336,24 +1458,56 @@ class GroupConfigModal extends obsidian.Modal {
 class OrganizerSettingTab extends obsidian.PluginSettingTab {
     constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
 
+    // The scrollable ancestor of the settings content, found by inspecting overflow so it works
+    // regardless of whether the tab content or its container is the scroller.
+    getScrollEl() {
+        const win = (this.containerEl.ownerDocument && this.containerEl.ownerDocument.defaultView) || window;
+        let el = this.containerEl;
+        while (el && el !== this.containerEl.ownerDocument.body) {
+            const overflowY = win.getComputedStyle(el).overflowY;
+            if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+            el = el.parentElement;
+        }
+        return this.containerEl;
+    }
+
+    // Rebuilds the settings tab while keeping the scroll position, so collapsing/expanding or
+    // reordering a group doesn't jump the view back to the top.
+    displayPreservingScroll() {
+        const scrollEl = this.getScrollEl();
+        const st = scrollEl.scrollTop;
+        this.display();
+        // Restore synchronously, before the browser paints, so the rebuilt content is never shown
+        // scrolled to the top for a frame (which looked like a flash). display() builds the DOM
+        // synchronously, so the full scroll height is already in place here.
+        scrollEl.scrollTop = st;
+        // Re-affirm on the next animation frame (still before paint) in case any layout settles
+        // after the synchronous set — belt-and-suspenders that never repaints if already correct.
+        const win = (scrollEl.ownerDocument && scrollEl.ownerDocument.defaultView) || window;
+        win.requestAnimationFrame(() => { scrollEl.scrollTop = st; });
+    }
+
     bindBadgeHoverLogic(badge) {
         badge.addEventListener('mouseenter', () => {
             if (this.plugin.activeTooltip) this.plugin.activeTooltip.remove();
             const tooltipData = badge.tooltipDataObject;
             if (!tooltipData) return;
 
-            const tooltipEl = document.createElement('div');
+            // Renders into the badge's own window so the tooltip shows in the settings popout (1.13)
+            const doc = badge.ownerDocument || document;
+
+            const tooltipEl = doc.createElement('div');
             tooltipEl.className = 'my-org-custom-tooltip';
 
             const line1 = tooltipEl.createDiv({ cls: 'my-org-modal-help-text my-org-tt-help-1' });
-            line1.appendChild(document.createTextNode("Use "));
+            line1.appendChild(doc.createTextNode("Use "));
             line1.createSpan({ text: "," });
-            line1.appendChild(document.createTextNode(" to separate. Prefix with "));
+            line1.appendChild(doc.createTextNode(" to separate. Prefix with "));
             line1.createSpan({ text: "!" });
-            line1.appendChild(document.createTextNode(" to exclude."));
+            line1.appendChild(doc.createTextNode(" to exclude."));
 
             const line2 = tooltipEl.createDiv({ cls: 'my-org-modal-help-text' });
-            line2.appendChild(document.createTextNode("Example: "));
+            line2.appendChild(doc.createTextNode("Example: "));
             line2.createSpan({ text: "table, !\"advanced table\", sidebar organizer" });
 
             if (tooltipData.length === 0) {
@@ -1417,7 +1571,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 }
             }
 
-            document.body.appendChild(tooltipEl);
+            doc.body.appendChild(tooltipEl);
             this.plugin.activeTooltip = tooltipEl;
 
             const badgeRect = badge.getBoundingClientRect();
@@ -1447,10 +1601,11 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.collapsibleHeaders = value;
                     await this.plugin.saveSettings();
+                    const doc = this.plugin.settingDoc();
                     if (!value) {
-                        document.querySelectorAll('.vertical-tab-header-group-title.is-collapsed, .vertical-tab-header-group-items.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
+                        doc.querySelectorAll('.vertical-tab-header-group-title.is-collapsed, .vertical-tab-header-group-items.is-collapsed').forEach(el => el.classList.remove('is-collapsed'));
                     }
-                    document.body.classList.toggle('my-org-collapse-enabled', value);
+                    doc.body.classList.toggle('my-org-collapse-enabled', value);
                 }));
 
         new obsidian.Setting(containerEl)
@@ -1604,8 +1759,8 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     this.plugin.settings.groups.forEach((g, i) => {
                         this.plugin.settings.collapsedSettingGroups[i] = willCollapse;
                     });
-                    await this.plugin.saveSettings();
-                    this.display();
+                    await this.plugin.saveSettings(false);
+                    this.displayPreservingScroll();
                 });
             b.extraSettingsEl.style.marginRight = '8px';
         });
@@ -1652,10 +1807,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
 
             await this.plugin.saveSettings();
             sortSelect.blur();
-            const scrollEl = containerEl.closest ? (containerEl.closest('.vertical-tab-content') || containerEl) : containerEl;
-            const st = scrollEl.scrollTop;
-            this.display();
-            setTimeout(() => { if (scrollEl) scrollEl.scrollTop = st; }, 0);
+            this.displayPreservingScroll();
         };
 
         const recalculateAllMatches = () => {
@@ -1743,12 +1895,15 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             obsidian.setTooltip(dragHandle, 'Drag to reorder');
             dragHandle.style.cursor = 'grab';
 
+            // Drag tracking must bind to the settings window (a popout in 1.13), not the main window
+            const dragWin = (dragHandle.ownerDocument && dragHandle.ownerDocument.defaultView) || window;
+
             const collapseBtn = headerSetting.nameEl.createSpan({ cls: 'my-org-collapse-icon clickable-icon' });
             obsidian.setIcon(collapseBtn, isCollapsed ? 'chevron-right' : 'chevron-down');
             collapseBtn.onclick = async () => {
                 this.plugin.settings.collapsedSettingGroups[index] = !isCollapsed;
-                await this.plugin.saveSettings();
-                this.display();
+                await this.plugin.saveSettings(false);
+                this.displayPreservingScroll();
             };
 
             const onPointerMove = (pe) => {
@@ -1853,13 +2008,13 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                         this.plugin.settings.collapsedSettingGroups = newCollapsedSettingGroups;
 
                         await this.plugin.saveSettings();
-                        this.display();
+                        this.displayPreservingScroll();
                     }
                 }
 
                 this.draggedGroupIndex = null;
-                window.removeEventListener('pointermove', onPointerMove);
-                window.removeEventListener('pointerup', onPointerUp);
+                dragWin.removeEventListener('pointermove', onPointerMove);
+                dragWin.removeEventListener('pointerup', onPointerUp);
             };
 
             dragHandle.addEventListener('pointerdown', (pe) => {
@@ -1867,8 +2022,8 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                 this.draggedGroupIndex = index;
                 div.classList.add('is-dragging');
 
-                window.addEventListener('pointermove', onPointerMove);
-                window.addEventListener('pointerup', onPointerUp);
+                dragWin.addEventListener('pointermove', onPointerMove);
+                dragWin.addEventListener('pointerup', onPointerUp);
             });
 
 
@@ -1905,7 +2060,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     }
                     group.isLocked = willBeLocked;
                     await this.plugin.saveSettings();
-                    this.display();
+                    this.displayPreservingScroll();
                 });
             });
 
@@ -1914,7 +2069,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                     .setTooltip('Manage matched plugins')
                     .onClick(() => {
                         new GroupConfigModal(this.app, this.plugin, index, () => {
-                            this.display();
+                            this.displayPreservingScroll();
                         }).open();
                     });
             });
@@ -1951,7 +2106,7 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
                         this.plugin.deleteGracePeriod = false;
                     }, 15000);
 
-                    this.display();
+                    this.displayPreservingScroll();
                 };
 
                 if (this.plugin.deleteGracePeriod) {
@@ -2209,7 +2364,7 @@ class AddPluginByKeywordModal extends obsidian.Modal {
                 this.plugin.addCustomTooltip(noteBtn, () => {
                     const text = this.plugin.getCleanNote(item.id);
                     if (text) return text;
-                    const fallback = document.createElement('div');
+                    const fallback = (noteBtn.ownerDocument || document).createElement('div');
                     fallback.className = 'my-org-note-fallback';
                     fallback.innerText = "Click to add note";
                     return fallback;
