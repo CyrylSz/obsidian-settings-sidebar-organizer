@@ -12,7 +12,7 @@ const DEFAULT_SETTINGS = {
     pluginNotes: {},
     noteTimestamps: {},
     notesFilePath: '',
-    sidebarTooltipPosition: 'left',
+    sidebarTooltipPosition: 'right',
     autoAppendDesc: false,
     knownPluginTabs: {},
     showSearchBar: true
@@ -483,6 +483,9 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
 
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        if (this.settings.sidebarTooltipPosition === 'left') {
+            this.settings.sidebarTooltipPosition = 'right';
+        }
     }
 
     async saveSettings(shouldReorganize = true) {
@@ -873,7 +876,7 @@ module.exports = class SettingsSidebarOrganizerPlugin extends obsidian.Plugin {
             if (this.settings.sidebarTooltipPosition === 'hidden') return null;
             return this.getCleanNote(settingId);
         }, {
-            position: () => this.settings.sidebarTooltipPosition || 'left',
+            position: () => this.settings.sidebarTooltipPosition === 'left' ? 'right' : (this.settings.sidebarTooltipPosition || 'right'),
             extraClass: 'my-org-sidebar-note-tooltip',
             offset: 10
         });
@@ -1655,10 +1658,9 @@ class OrganizerSettingTab extends obsidian.PluginSettingTab {
             .setName('Sidebar notes tooltip position')
             .setDesc('Choose where the note tooltip should appear when hovering over community plugins in the sidebar.')
             .addDropdown(dropdown => dropdown
-                .addOption('left', 'Left')
                 .addOption('right', 'Right')
                 .addOption('hidden', 'Hidden')
-                .setValue(this.plugin.settings.sidebarTooltipPosition || 'left')
+                .setValue(this.plugin.settings.sidebarTooltipPosition || 'right')
                 .onChange(async (value) => {
                     this.plugin.settings.sidebarTooltipPosition = value;
                     await this.plugin.saveSettings(true);
