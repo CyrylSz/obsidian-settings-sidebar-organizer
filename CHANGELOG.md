@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### 🔵 Compatibility
+- **Obsidian 1.13 support**: Fixed the plugin doing nothing on Obsidian 1.13, where Settings opens in a separate window by default. The sidebar organizing, notes tooltips, drag-and-drop, and compact mode now operate on the settings window's own document instead of the main window, working in both windowed and in-app settings modes.
+
+### 🟡 Refinements
+- **Scroll position**: Collapsing/expanding a group, reordering, locking, deleting, or editing matched plugins no longer jumps the settings view back to the top; the scroll position is restored synchronously before paint, so there is no flash.
+
 ## 1.2.0 - Exclude/Hide/Quick Add Keywords, Search, Group Lock, Auto-Notes and much more - 23-06-2026
 
 ### 🟢 New Features
