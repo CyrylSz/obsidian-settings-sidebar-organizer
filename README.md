@@ -29,8 +29,8 @@ Created because I had too many plugins and got lost in the sidebar; [feedback we
 * **Group Lock:** Freeze any group's matched plugins to prevent newly installed plugins from auto-matching, while still allowing the match count to decrease if a plugin is uninstalled.
 
 ### 2. ✏️ Aliases & Order
-* **Aliasing:** Rename plugins to save space or improve clarity. Aliases automatically synchronize globally for the same plugin.
-* **Sorting Options:** Sort your plugins/groups alphabetically, or drag & drop them exactly how you want them (espects native scroll wheel sensitivity and supports proximity auto-scrolling).
+* **Aliasing:** Rename plugins to save space or improve clarity (e.g., "Kanban" → "Stuff in columns"). Aliases synchronize globally for the same plugin.
+* **Sorting Options:** Sort your plugins/groups alphabetically, or drag & drop them exactly how you want them (respects native scroll wheel sensitivity and supports proximity auto-scrolling).
 
 ### 3. 📝 Plugin Management & Notes
 * **Plugin Toggles:** Enable/disable your plugins directly from the group configuration menu. Use master switches to instantly toggle or hide/unhide all plugins in a group at once.
@@ -62,7 +62,7 @@ Created because I had too many plugins and got lost in the sidebar; [feedback we
 2. Create folder `.obsidian/plugins/settings-sidebar-organizer/`.
 3. Paste files and reload Obsidian.
 
-## ⚙️ How to use
+## ⚙️ TL;DR: How to use
 Everything is configured via **Settings > Settings Sidebar Organizer**:
 
 1.  **Create Group:** Click `+ Add Group`.
@@ -72,3 +72,4 @@ Everything is configured via **Settings > Settings Sidebar Organizer**:
     * **Toggle** plugins on/off or hide/unhide them.
     * Set an **Alias** (rename).
     * Write **Notes** for your plugins.
+4.  **Lock Group:** You can click the **Lock Icon (🔒)** to freeze matched plugins.
