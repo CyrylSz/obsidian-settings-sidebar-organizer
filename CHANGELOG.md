@@ -6,7 +6,7 @@
 - **Obsidian 1.13 support**: Fixed the plugin doing nothing on Obsidian 1.13, where Settings opens in a separate window by default. The sidebar organizing, notes tooltips, drag-and-drop, and compact mode now operate on the settings window's own document instead of the main window, working in both windowed and in-app settings modes (backward compatibility).
 
 ### 🟡 Refinements (by [@nelsonlove](https://github.com/nelsonlove) - [PR #9](https://github.com/CyrylSz/obsidian-settings-sidebar-organizer/pull/9))
-- **Scroll position**: Collapsing/expanding a group, reordering, locking, deleting, or editing matched plugins no longer jumps the settings view back to the top; the scroll position is restored synchronously before paint, so there is no flash. Huge thanks to [@nelsonlove](https://github.com/nelsonlove) ([PR #9](https://github.com/CyrylSz/obsidian-settings-sidebar-organizer/pull/9))!
+- **Scroll position**: Collapsing/expanding a group, reordering, locking, deleting, or editing matched plugins no longer jumps the settings view back to the top; the scroll position is restored synchronously before paint, so there is no flash.
 
 ### 🔴 Deletions
 - **Tooltip Position**: Removed the 'Left' position option for sidebar note tooltips as it is incompatible with Obsidian 1.13's separate popout settings window; defaults to 'Right' and auto-migrates existing settings.
